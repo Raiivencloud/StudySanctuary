@@ -1,0 +1,24 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="128" fill="#002147"/>
+  <!-- Pillar -->
+  <path d="M200 420H312V430H200V420Z" fill="#555555"/>
+  <path d="M210 410H302V420H210V410Z" fill="#555555"/>
+  <rect x="220" y="240" width="72" height="170" fill="#555555"/>
+  <rect x="230" y="240" width="10" height="170" fill="#444444"/>
+  <rect x="250" y="240" width="10" height="170" fill="#444444"/>
+  <rect x="270" y="240" width="10" height="170" fill="#444444"/>
+  <path d="M210 220H302V240H210V220Z" fill="#555555"/>
+  <path d="M200 210H312V220H200V210Z" fill="#555555"/>
+  
+  <!-- Book -->
+  <path d="M256 180C256 180 210 180 180 150V100C210 130 256 130 256 130C256 130 302 130 332 100V150C302 180 256 180 256 180Z" fill="#C5A059"/>
+  <path d="M256 180V130" stroke="#8B6B3D" stroke-width="2"/>
+  <path d="M180 150C210 180 256 180 256 180" stroke="#8B6B3D" stroke-width="2"/>
+  <path d="M332 150C302 180 256 180 256 180" stroke="#8B6B3D" stroke-width="2"/>
+  
+  <!-- Pages -->
+  <path d="M256 125C256 125 215 125 190 105" stroke="#F5E6D3" stroke-width="3" stroke-linecap="round"/>
+  <path d="M256 115C256 115 215 115 195 100" stroke="#F5E6D3" stroke-width="3" stroke-linecap="round"/>
+  <path d="M256 125C256 125 297 125 322 105" stroke="#F5E6D3" stroke-width="3" stroke-linecap="round"/>
+  <path d="M256 115C256 115 297 115 317 100" stroke="#F5E6D3" stroke-width="3" stroke-linecap="round"/>
+</svg>

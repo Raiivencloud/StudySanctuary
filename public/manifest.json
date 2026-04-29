@@ -1,0 +1,17 @@
+{
+  "name": "Santuario de Estudio",
+  "short_name": "Santuario",
+  "description": "Tu academia inteligente para el estudio enfocado.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#002147",
+  "theme_color": "#002147",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

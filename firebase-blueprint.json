@@ -1,0 +1,404 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoURL": { "type": "string", "format": "uri" },
+        "bannerURL": { "type": "string", "format": "uri" },
+        "lastLogin": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "subscription": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["trial", "active", "expired", "cancelled"] },
+            "type": { "type": "string", "enum": ["free", "monthly", "quarterly", "annual"] },
+            "trialStartDate": { "type": "string", "format": "date-time" },
+            "subscriptionEndDate": { "type": "string", "format": "date-time" }
+          }
+        },
+        "connectedAccounts": {
+          "type": "object",
+          "properties": {
+            "spotify": {
+              "type": "object",
+              "properties": {
+                "accessToken": { "type": "string" },
+                "refreshToken": { "type": "string" },
+                "expiresAt": { "type": "integer" }
+              }
+            },
+            "appleMusic": {
+              "type": "object",
+              "properties": {
+                "userToken": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "required": ["displayName", "email"]
+    },
+    "StudyGroup": {
+      "title": "StudyGroup",
+      "description": "A group of users studying a specific course together",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "courseId": { "type": "string" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "memberCount": { "type": "integer" }
+      },
+      "required": ["name", "courseId", "createdBy", "createdAt"]
+    },
+    "GroupMember": {
+      "title": "GroupMember",
+      "description": "A membership record for a user in a study group",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "member"] },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "userId", "role", "joinedAt"]
+    },
+    "SharedNote": {
+      "title": "SharedNote",
+      "description": "A note shared within a study group",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "title", "content", "authorId", "createdAt"]
+    },
+    "SharedStudyPlan": {
+      "title": "SharedStudyPlan",
+      "description": "A study plan shared and collaborated on within a group",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "duration": { "type": "string" },
+              "completed": { "type": "boolean" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["groupId", "title", "steps", "createdAt"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "User feedback, suggestions, and error reports",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "type": { "type": "string", "enum": ["opinion", "error", "suggestion"] },
+        "message": { "type": "string" },
+        "rating": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isPublic": { "type": "boolean" }
+      },
+      "required": ["userId", "type", "message", "createdAt"]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "A study course created by the user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "progress": { "type": "integer" },
+        "type": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
+        "summary": { "type": "string" },
+        "theory": { "type": "string" },
+        "examples": { "type": "string" },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "createdAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A study task or to-do item",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "duration": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "completed", "createdAt"]
+    },
+    "AIActivity": {
+      "title": "AIActivity",
+      "description": "An activity generated by AI",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["flashcards", "map", "summary", "plan", "exam", "exercises", "diagram"] },
+        "timestamp": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "type", "timestamp", "createdAt"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "An exam or quiz record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "location": { "type": "string" },
+        "type": { "type": "string", "enum": ["Primary", "Secondary", "Finals", "Midterm", "Quiz"] },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "reminder": { "type": "string", "enum": ["none", "1h", "2h", "1d", "2d"] },
+        "color": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "type", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A message in a chat conversation with the AI",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "chatId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "model"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "chatId", "role", "content", "timestamp", "createdAt"]
+    },
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "A chat session with the AI",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["tutor", "voice"] },
+        "lastMessage": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "type", "createdAt"]
+    },
+    "UserFile": {
+      "title": "UserFile",
+      "description": "A file uploaded by the user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "url": { "type": "string" },
+        "size": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "url", "createdAt"]
+    },
+    "BookProgress": {
+      "title": "BookProgress",
+      "description": "User reading progress and content for a specific book",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "bookId": { "type": "string" },
+        "content": { "type": "array", "items": { "type": "string" } },
+        "currentPage": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "bookId"]
+    },
+    "ArenaQuestion": {
+      "title": "ArenaQuestion",
+      "description": "A question for the Arena game",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string" },
+        "level": { "type": "string", "enum": ["Inicial", "Secundaria", "Universitario", "Profesional"] },
+        "question": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "correctAnswer": { "type": "integer" },
+        "explanation": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["category", "level", "question", "options", "correctAnswer", "createdAt"]
+    },
+    "ArenaUserStats": {
+      "title": "ArenaUserStats",
+      "description": "User statistics and state for the Arena game",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "lives": { "type": "integer" },
+        "maxLives": { "type": "integer" },
+        "streak": { "type": "integer" },
+        "maxStreak": { "type": "integer" },
+        "lastLifeLostAt": { "type": "string", "format": "date-time" },
+        "cooldownUntil": { "type": "string", "format": "date-time" },
+        "credits": { "type": "integer" },
+        "totalPoints": { "type": "integer" },
+        "levelPoints": { "type": "object" },
+        "collectibles": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["userId", "lives", "maxLives", "streak", "maxStreak", "credits", "totalPoints"]
+    },
+    "ArenaCollectible": {
+      "title": "ArenaCollectible",
+      "description": "A collectible card earned in the Arena game",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "rarity": { "type": "string", "enum": ["Bronce", "Plata", "Oro", "Fuego"] },
+        "imageUrl": { "type": "string" },
+        "description": { "type": "string" },
+        "unlockedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "rarity", "unlockedAt"]
+    }
+  },
+  "firestore": {
+    "/arena_questions/{questionId}": {
+      "schema": "ArenaQuestion",
+      "description": "Global bank of Arena questions"
+    },
+    "/arena_stats/{userId}": {
+      "schema": "ArenaUserStats",
+      "description": "User-specific Arena statistics"
+    },
+    "/arena_collectibles/{collectibleId}": {
+      "schema": "ArenaCollectible",
+      "description": "Collectibles earned by users"
+    },
+    "/arena_rankings/{level}_{userId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string" },
+          "displayName": { "type": "string" },
+          "photoURL": { "type": "string" },
+          "points": { "type": "integer" },
+          "level": { "type": "string" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "description": "Leaderboard entries per level"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/user_courses/{courseId}": {
+      "schema": "Course",
+      "description": "User study courses"
+    },
+    "/user_courses/{courseId}/content/{contentId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "summary": { "type": "string" },
+          "theory": { "type": "string" },
+          "examples": { "type": "string" },
+          "exams": { "type": "array" }
+        }
+      },
+      "description": "Large AI-generated content for a course"
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "User study tasks"
+    },
+    "/activities/{activityId}": {
+      "schema": "AIActivity",
+      "description": "User AI-generated activities"
+    },
+    "/exams/{examId}": {
+      "schema": "Exam",
+      "description": "User exams and quizzes"
+    },
+    "/chats/{chatId}": {
+      "schema": "ChatSession",
+      "description": "User chat sessions"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Messages within a chat session"
+    },
+    "/groups/{groupId}": {
+      "schema": "StudyGroup",
+      "description": "Study group details"
+    },
+    "/groups/{groupId}/members/{userId}": {
+      "schema": "GroupMember",
+      "description": "Members of a study group"
+    },
+    "/groups/{groupId}/notes/{noteId}": {
+      "schema": "SharedNote",
+      "description": "Notes shared within a group"
+    },
+    "/groups/{groupId}/plans/{planId}": {
+      "schema": "SharedStudyPlan",
+      "description": "Collaborative study plans"
+    },
+    "/feedback/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "User feedback and suggestions"
+    },
+    "/userFiles/{fileId}": {
+      "schema": "UserFile",
+      "description": "General user files"
+    },
+    "/bookProgress/{progressId}": {
+      "schema": "BookProgress",
+      "description": "User book reading progress"
+    }
+  }
+}

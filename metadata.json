@@ -1,0 +1,5 @@
+{
+  "name": "Study Sanctuary",
+  "description": "Una plataforma de estudio enfocada con asistencia de IA para organizar tus cursos, calendarios y planes de estudio diarios.",
+  "requestFramePermissions": ["microphone", "camera"]
+}

@@ -1,0 +1,350 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          (request.auth.token.email.toLower() == "agusgestro17@gmail.com" && request.auth.token.email_verified == true) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && 
+             (
+               (resource != null && 'userId' in resource.data && request.auth.uid == resource.data.userId) ||
+               (resource != null && 'uid' in resource.data && request.auth.uid == resource.data.uid) ||
+               (resource != null && 'authorId' in resource.data && request.auth.uid == resource.data.authorId)
+             );
+    }
+
+    function isGroupMember(groupId) {
+      return isAuthenticated() && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    function isGroupAdmin(groupId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidUser(data) {
+      return (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('email' in data) || (data.email is string && data.email.size() < 200)) &&
+             (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() < 1048576)) &&
+             (!('bannerURL' in data) || data.bannerURL == null || (data.bannerURL is string && data.bannerURL.size() < 1048576)) &&
+             (!('lastLogin' in data) || (data.lastLogin is timestamp || data.lastLogin is string || data.lastLogin == null)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp || data.createdAt is string || data.createdAt == null)) &&
+             (!('role' in data) || (data.role in ['admin', 'user', 'client'])) &&
+             (!('preferences' in data) || (
+               data.preferences is map &&
+               (!('theme' in data.preferences) || data.preferences.theme in ['light', 'dark']) &&
+               (!('language' in data.preferences) || data.preferences.language in ['es', 'en', 'pt']) &&
+               (!('notifications' in data.preferences) || data.preferences.notifications is bool) &&
+               (!('wallpaperUrl' in data.preferences) || data.preferences.wallpaperUrl == null || (data.preferences.wallpaperUrl is string && data.preferences.wallpaperUrl.size() < 2097152)) &&
+               (!('wallpaperType' in data.preferences) || data.preferences.wallpaperType in ['image', null])
+             )) &&
+             (!('subscription' in data) || (
+               data.subscription is map &&
+               (!('status' in data.subscription) || data.subscription.status in ['trial', 'active', 'expired', 'cancelled']) &&
+               (!('type' in data.subscription) || data.subscription.type in ['free', 'monthly', 'quarterly', 'annual'])
+             ));
+    }
+
+    function isValidGroup(data) {
+      return data.keys().hasAll(['name', 'courseId', 'createdBy', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.courseId is string &&
+             data.createdBy == request.auth.uid;
+    }
+
+    function isValidNote(data) {
+      return data.keys().hasAll(['groupId', 'title', 'content', 'authorId', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.content is string && data.content.size() < 10000 &&
+             data.authorId == request.auth.uid;
+    }
+
+    function isValidPlan(data) {
+      return data.keys().hasAll(['groupId', 'title', 'steps', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.steps is list && data.steps.size() < 50;
+    }
+
+    function isValidCourse(data) {
+      return data.keys().hasAll(['userId', 'title', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 500 &&
+             (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() < 1000)) &&
+             (!('type' in data) || (data.type is string && data.type.size() < 200)) &&
+             (!('icon' in data) || (data.icon is string && data.icon.size() < 200)) &&
+             (!('color' in data) || (data.color is string && data.color.size() < 200)) &&
+             (!('summary' in data) || (data.summary is string && data.summary.size() < 100000)) &&
+             (!('theory' in data) || (data.theory is string && data.theory.size() < 500000)) &&
+             (!('examples' in data) || (data.examples is string && data.examples.size() < 200000)) &&
+             (!('exercises' in data) || (data.exercises is string && data.exercises.size() < 200000)) &&
+             (!('diagram' in data) || (data.diagram is string && data.diagram.size() < 200000)) &&
+             (!('podcastScript' in data) || (data.podcastScript is string && data.podcastScript.size() < 200000)) &&
+             (!('files' in data) || (data.files is list && data.files.size() < 200)) &&
+             (!('exams' in data) || (data.exams is list && data.exams.size() < 100)) &&
+             (!('progress' in data) || (data.progress is number && data.progress >= 0 && data.progress <= 100)) &&
+             (!('studyLevel' in data) || (data.studyLevel is string && data.studyLevel.size() < 200));
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll(['userId', 'title', 'completed', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 500 &&
+             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
+             (!('duration' in data) || (data.duration is string && data.duration.size() < 100)) &&
+             data.completed is bool;
+    }
+
+    function isValidActivity(data) {
+      return data.keys().hasAll(['userId', 'title', 'type', 'timestamp', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 500 &&
+             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
+             data.type in ['flashcards', 'map', 'summary', 'plan', 'exam', 'exercises', 'diagram'] &&
+             data.timestamp is number &&
+             (data.createdAt is timestamp || data.createdAt is string);
+    }
+
+    function isValidExam(data) {
+      return data.keys().hasAll(['userId', 'title', 'type', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 500 &&
+             (!('date' in data) || (data.date is string && data.date.size() < 100)) &&
+             (!('time' in data) || (data.time is string && data.time.size() < 100)) &&
+             (!('location' in data) || (data.location is string && data.location.size() < 500)) &&
+             data.type in ['Primary', 'Secondary', 'Finals', 'Midterm', 'Quiz'] &&
+             (!('tags' in data) || (data.tags is list && data.tags.size() < 20)) &&
+             (!('reminder' in data) || data.reminder in ['none', '1h', '2h', '1d', '2d']) &&
+             (!('color' in data) || (data.color is string && data.color.size() < 100));
+    }
+
+    function isValidUserFile(data) {
+      return data.keys().hasAll(['userId', 'name', 'url', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 500 &&
+             data.url is string && data.url.size() > 0 && data.url.size() < 2048 &&
+             (!('type' in data) || (data.type is string && data.type.size() < 100)) &&
+             (!('size' in data) || (data.size is number && data.size >= 0));
+    }
+
+    function isValidBookProgress(data) {
+      return data.keys().hasAll(['userId', 'bookId']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.bookId is string && data.bookId.size() > 0 &&
+             (!('content' in data) || (data.content is list && data.content.size() < 1000)) &&
+             (!('currentPage' in data) || (data.currentPage is number && data.currentPage >= 0));
+    }
+
+    function isValidRanking(data) {
+      return data.keys().hasAll(['userId', 'displayName', 'photoURL', 'points', 'level', 'updatedAt']) &&
+             data.userId == request.auth.uid &&
+             data.displayName is string && data.displayName.size() < 100 &&
+             data.photoURL is string &&
+             data.points is number &&
+             data.level in ['Inicial', 'Secundario', 'Universidad', 'Master'] &&
+             (data.updatedAt is timestamp || data.updatedAt is string);
+    }
+
+    function isValidArenaStats(data) {
+      return data.keys().hasAll(['userId', 'lives', 'maxLives', 'streak', 'maxStreak', 'credits', 'totalPoints']) &&
+             data.userId == request.auth.uid &&
+             data.lives is number &&
+             data.maxLives is number &&
+             data.streak is number &&
+             data.maxStreak is number &&
+             data.credits is number &&
+             data.totalPoints is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // User Profiles
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      
+      // Allow access to all subcollections for the user
+      match /{document=**} {
+        allow read, write: if isOwner(userId);
+      }
+      
+      allow delete: if isAdmin();
+    }
+
+    // Study Groups
+    match /groups/{groupId} {
+      // Allow any authenticated user to see groups to join
+      allow read: if isAuthenticated();
+      
+      // Allow creating a group
+      allow create: if isAuthenticated() && isValidGroup(request.resource.data);
+      
+      // Only admin can update group info
+      allow update: if isGroupAdmin(groupId) && isValidGroup(request.resource.data);
+      
+      // Only admin can delete group
+      allow delete: if isGroupAdmin(groupId);
+
+      // Group Members
+      match /members/{userId} {
+        allow read: if isGroupMember(groupId);
+        
+        // Allow joining a group (creating own membership)
+        allow create: if isOwner(userId) && 
+                         request.resource.data.userId == request.auth.uid &&
+                         request.resource.data.role == 'member';
+                         
+        // Allow admin to promote members or members to leave
+        allow update: if isGroupAdmin(groupId) || (isOwner(userId) && request.resource.data.role == 'member');
+        
+        // Allow admin to remove members or members to leave
+        allow delete: if isGroupAdmin(groupId) || isOwner(userId);
+      }
+
+      // Shared Notes
+      match /notes/{noteId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId) && isValidNote(request.resource.data);
+        allow update: if isGroupMember(groupId) && (request.auth.uid == resource.data.authorId || isGroupAdmin(groupId)) && isValidNote(request.resource.data);
+        allow delete: if isGroupMember(groupId) && (request.auth.uid == resource.data.authorId || isGroupAdmin(groupId));
+      }
+
+      // Shared Study Plans
+      match /plans/{planId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId) && isValidPlan(request.resource.data);
+        allow update: if isGroupMember(groupId) && isValidPlan(request.resource.data);
+        allow delete: if isGroupMember(groupId) && isGroupAdmin(groupId);
+      }
+    }
+
+    // Feedback
+    match /feedback/{feedbackId} {
+      allow read: if isAdmin() || (resource != null && resource.data.isPublic == true);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // User Owned Data (Courses, Tasks, Activities, Exams, Chats)
+    function isOwnerOf(data) {
+      return isAuthenticated() && data.userId == request.auth.uid;
+    }
+
+    match /user_courses/{courseId} {
+      allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidCourse(request.resource.data);
+      allow update: if isAdmin() || (isDocOwner() && isValidCourse(request.resource.data) && (!('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid));
+      allow delete: if isAdmin() || isDocOwner();
+
+      match /content/{contentId} {
+        // Allow access if the user owns the document OR if they own the parent course
+        allow read, write: if isAdmin() || isDocOwner() || 
+                             (isAuthenticated() && get(/databases/$(database)/documents/user_courses/$(courseId)).data.userId == request.auth.uid);
+      }
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidTask(request.resource.data);
+      allow update: if isAdmin() || (isDocOwner() && isValidTask(request.resource.data));
+      allow delete: if isAdmin() || isDocOwner();
+    }
+
+    match /activities/{activityId} {
+      allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidActivity(request.resource.data);
+      allow update: if isAdmin() || (isDocOwner() && isValidActivity(request.resource.data));
+      allow delete: if isAdmin() || isDocOwner();
+    }
+
+    match /exams/{examId} {
+      allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidExam(request.resource.data);
+      allow update: if isAdmin() || (isDocOwner() && isValidExam(request.resource.data));
+      allow delete: if isAdmin() || isDocOwner();
+    }
+
+    match /chats/{chatId} {
+      allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || isDocOwner();
+      allow delete: if isAdmin() || isDocOwner();
+
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    match /userFiles/{fileId} {
+      allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidUserFile(request.resource.data);
+      allow update: if isAdmin() || (isDocOwner() && isValidUserFile(request.resource.data));
+      allow delete: if isAdmin() || isDocOwner();
+    }
+
+    match /bookProgress/{progressId} {
+      allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidBookProgress(request.resource.data);
+      allow update: if isAdmin() || (isDocOwner() && isValidBookProgress(request.resource.data));
+      allow delete: if isAdmin() || isDocOwner();
+    }
+
+    // Global Stats
+    match /stats/{statId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Public Library
+    match /publicLibrary/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Arena Sanctuary Rules
+    match /arena_questions/{questionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated(); // Allow users to save AI generated questions
+      allow update, delete: if isAdmin();
+    }
+
+    match /arena_stats/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidArenaStats(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /arena_collectibles/{collectibleId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /arena_rankings/{rankingId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && 
+                              rankingId == request.resource.data.level + "_" + request.auth.uid &&
+                              isValidRanking(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}
