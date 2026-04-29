@@ -1,20 +1,28 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# StudySanctuary 📚
 
-# Run and deploy your AI Studio app
+**StudySanctuary** is an advanced AI-powered educational ecosystem designed to revolutionize how students interact with information. It automates study workflows, generates personalized learning paths, and provides intelligent document synthesis using Google's Gemini AI.
 
-This contains everything you need to run your app locally.
+## 🚀 Key Features
 
-View your app in AI Studio: https://ai.studio/apps/34c414b0-81b1-4949-8bec-5336fa6f0a9c
+* **AI Study Assistant:** Intelligent interaction with course materials via `geminiStudy.ts` for deep context understanding.
+* **Personalized Learning Paths:** Dynamically generated study plans tailored to individual student needs and progress.
+* **Automated Document Synthesis:** Summarization and extraction of key concepts from academic texts using RAG principles.
+* **Real-time Collaboration:** Secure, cloud-synced environment for managing study resources and progress tracking.
 
-## Run Locally
+## 🛠️ Technical Architecture
 
-**Prerequisites:**  Node.js
+* **Frontend:** [React](https://react.dev/) + [Vite](https://vitejs.dev/) for an ultra-fast, modern developer experience and performance.
+* **Language:** [TypeScript](https://www.typescriptlang.org/) ensuring end-to-end type safety and maintainable code.
+* **Infrastructure:** [Firebase](https://firebase.google.com/) for real-time database (Firestore), authentication, and secure hosting.
+* **AI Orchestration:** Seamless integration with Google Gemini SDK for complex natural language processing tasks.
+* **State & Logic:** Modular hooks and context providers for efficient global state management.
 
+## 📦 Project Structure
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```text
+src/
+├── components/     # UI Building Blocks (Dashboard, StudyViews, Shared)
+├── contexts/       # Global State (Auth, StudySettings)
+├── hooks/          # Reusable Business Logic & UI Helpers
+├── lib/            # Firebase & SDK Configurations
+└── services/       # Core AI Logic (Gemini API Integrations)
