@@ -66,7 +66,7 @@ export const callGemini = async (prompt: string, config: any = {}, fileData?: an
       (import.meta as any).env?.VITE_GOOGLE_API_KEY ||
       process.env.GEMINI_API_KEY || 
       process.env.GOOGLE_API_KEY || 
-      "AIzaSyARJipjuIJ7dguggYV-IdYJIrpp3bnpjZI";
+     
     
     if (!apiKey || apiKey.length < 10) {
       throw new Error("API Key no válida o no configurada.");
