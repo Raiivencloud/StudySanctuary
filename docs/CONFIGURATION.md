@@ -48,7 +48,14 @@ npx tsx scripts/legacy-config-to-env.ts /ruta/a/firebase-applet-config.json >> .
 | `FIREBASE_DATABASE_ID` | No | Base de Firestore del Admin SDK. Vacío = `(default)`. Ver el aviso de abajo. |
 | `SESSION_SECRET` | **En producción** | Mínimo 32 caracteres (`openssl rand -hex 32`). En desarrollo, si falta, se genera uno aleatorio por proceso. |
 | `APP_URL` | Para OAuth y pagos | URL pública sin `/` final. |
-| `ADMIN_SECRET_KEY` | Para `/astra-core-admin` | — |
+| `ADMIN_EMAILS` | Para el panel de admin | Emails **verificados**, separados por coma, con acceso a `/api/admin/*`. Alternativa: *custom claim* `admin: true`. Vacío = nadie es admin. |
+| `ADMIN_SECRET_KEY` | Para `/astra-core-admin` | Se pide **además** de iniciar sesión como admin. Si falta, `toggle-ai` se rechaza (falla cerrado). |
+| `SESSION_COOKIE_SAMESITE` | No | `none` (por defecto en producción, solo necesario dentro de un iframe *cross-site*), `lax` (recomendado) o `strict`. En desarrollo siempre `lax`. |
+| `SESSION_MAX_AGE_HOURS` | No | Duración de la cookie de sesión (24 por defecto). |
+| `TRUST_PROXY` | No | Saltos de proxy de confianza. Por defecto 1 en producción (Cloud Run) y 0 en desarrollo. |
+| `UPLOAD_MAX_BYTES` | No | Tamaño máximo por archivo en `/api/storage/upload` y `/api/drive/upload` (25 MB por defecto). |
+| `RATE_LIMIT_API_PER_MINUTE` | No | Límite general por IP para `/api/*` (300 por defecto; el webhook de Mercado Pago queda excluido). |
+| `STORAGE_CORS_ON_STARTUP` | No | `true` reescribe el CORS del bucket a `*` en cada arranque (comportamiento anterior). Desactivado por defecto. |
 | `AI_PROXY_ENABLED` | No | `true` activa `/api/ai/generate`. **Desactivado por defecto.** |
 | `GEMINI_API_KEY` | Si `AI_PROXY_ENABLED=true` | Clave de Gemini **del servidor**. |
 | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_PUBLIC_KEY` | Para pagos | — |

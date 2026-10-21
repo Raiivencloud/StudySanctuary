@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { ShieldAlert, Terminal, Activity, DollarSign, Power, Lock, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { auth } from '../firebase';
+
+// Admin endpoints require the Firebase ID token of an admin account.
+const authHeaders = async (): Promise<Record<string, string>> => {
+  const idToken = await auth.currentUser?.getIdToken();
+  return idToken ? { Authorization: `Bearer ${idToken}` } : {};
+};
 
 interface AdminStats {
   activeUsers: number;
@@ -41,7 +48,7 @@ const SecurityAdmin: React.FC<SecurityAdminProps> = ({ isAuthenticated, onAuthen
     try {
       const res = await fetch('/api/admin/verify-key', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({ key: adminKey })
       });
       if (res.ok) {
@@ -61,9 +68,7 @@ const SecurityAdmin: React.FC<SecurityAdminProps> = ({ isAuthenticated, onAuthen
   const fetchStats = async () => {
     try {
       const res = await fetch('/api/admin/stats', {
-        headers: {
-          'x-user-email': 'Agusgestro17@gmail.com' // Still needed for backend check
-        }
+        headers: await authHeaders()
       });
       if (res.ok) {
         const data = await res.json();
@@ -80,7 +85,7 @@ const SecurityAdmin: React.FC<SecurityAdminProps> = ({ isAuthenticated, onAuthen
     try {
       const res = await fetch('/api/admin/toggle-ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({ key: adminKey, suspend: !stats.isAiSuspendedForFree })
       });
       if (res.ok) {

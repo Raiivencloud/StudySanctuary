@@ -23,6 +23,15 @@ if (missingClient.length > 0) {
 try {
   const config = loadServerConfig(env);
   console.log(`[servidor] OK (proyecto: ${config.firebase.projectId}, proxy IA: ${config.ai.proxyEnabled ? "activado" : "desactivado"}).`);
+  if (config.admin.emails.length === 0) {
+    console.warn("[aviso] ADMIN_EMAILS está vacío: solo las cuentas con custom claim `admin` podrán usar el panel de administración.");
+  }
+  if (!config.admin.secretKey) {
+    console.warn("[aviso] ADMIN_SECRET_KEY no está definida: /astra-core-admin no podrá usarse.");
+  }
+  if (!config.appUrl) {
+    console.warn("[aviso] APP_URL no está definida: los redirects de OAuth y el webhook de Mercado Pago no funcionarán.");
+  }
 
   const clientDb = (env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "").trim() || DEFAULT_FIRESTORE_DATABASE_ID;
   const serverDb = config.firebase.databaseId || DEFAULT_FIRESTORE_DATABASE_ID;

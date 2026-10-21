@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { db, handleFirestoreError, OperationType, storage, Timestamp } from '../firebase';
+import { auth, db, handleFirestoreError, OperationType, storage, Timestamp } from '../firebase';
 import { 
   collection, 
   query, 
@@ -118,7 +118,9 @@ export const CourseProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     formData.append('path', storagePath);
 
     try {
+      const idToken = await auth.currentUser?.getIdToken();
       const response = await axios.post('/api/storage/upload', formData, {
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : undefined,
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total) {
             const progress = (progressEvent.loaded / progressEvent.total) * 100;

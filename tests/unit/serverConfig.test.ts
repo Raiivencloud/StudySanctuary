@@ -73,3 +73,50 @@ test("AI proxy is disabled by default and requires a server key when enabled", (
   });
   assert.equal(enabled.ai.proxyEnabled, true);
 });
+
+test("Phase 2 defaults: cookie, proxy, admin, uploads and rate limits", () => {
+  const dev = loadServerConfig({ FIREBASE_PROJECT_ID: "demo" });
+  assert.deepEqual(
+    { secure: dev.session.cookieSecure, sameSite: dev.session.cookieSameSite, trustProxy: dev.trustProxy },
+    { secure: false, sameSite: "lax", trustProxy: 0 }
+  );
+  assert.deepEqual(dev.admin.emails, []);
+  assert.equal(dev.uploads.maxBytes, 25 * 1024 * 1024);
+  assert.equal(dev.rateLimit.apiPerMinute, 300);
+  assert.equal(dev.storage.corsOnStartup, false);
+  assert.equal(dev.session.maxAgeMs, 24 * 60 * 60 * 1000);
+
+  const prod = loadServerConfig({ NODE_ENV: "production", FIREBASE_PROJECT_ID: "demo", SESSION_SECRET: strongSecret });
+  assert.deepEqual(
+    { secure: prod.session.cookieSecure, sameSite: prod.session.cookieSameSite, trustProxy: prod.trustProxy },
+    { secure: true, sameSite: "none", trustProxy: 1 }
+  );
+});
+
+test("Phase 2 settings are parsed and validated", () => {
+  const config = loadServerConfig({
+    NODE_ENV: "production",
+    FIREBASE_PROJECT_ID: "demo",
+    SESSION_SECRET: strongSecret,
+    ADMIN_EMAILS: " Owner@Example.com, second@example.com ,",
+    SESSION_COOKIE_SAMESITE: "LAX",
+    TRUST_PROXY: "2",
+    UPLOAD_MAX_BYTES: "1048576",
+    APP_URL: "https://app.example.com/",
+  });
+  assert.deepEqual(config.admin.emails, ["owner@example.com", "second@example.com"]);
+  assert.equal(config.session.cookieSameSite, "lax");
+  assert.equal(config.trustProxy, 2);
+  assert.equal(config.uploads.maxBytes, 1048576);
+  assert.equal(config.appUrl, "https://app.example.com");
+
+  assert.throws(() => loadServerConfig({ FIREBASE_PROJECT_ID: "demo", SESSION_COOKIE_SAMESITE: "sometimes" }), /SESSION_COOKIE_SAMESITE/);
+  assert.throws(() => loadServerConfig({ FIREBASE_PROJECT_ID: "demo", UPLOAD_MAX_BYTES: "-5" }), /UPLOAD_MAX_BYTES/);
+  assert.throws(() => loadServerConfig({ FIREBASE_PROJECT_ID: "demo", TRUST_PROXY: "yes" }), /TRUST_PROXY/);
+});
+
+test("SameSite=None is never used without HTTPS (development)", () => {
+  const config = loadServerConfig({ FIREBASE_PROJECT_ID: "demo", SESSION_COOKIE_SAMESITE: "none" });
+  assert.equal(config.session.cookieSameSite, "lax");
+  assert.equal(config.session.cookieSecure, false);
+});

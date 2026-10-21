@@ -249,6 +249,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleLogout = async () => {
     try {
+      // Destroy the server session (Google/Outlook tokens) so the next user of this browser can't reuse it
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
       await firebaseLogout();
       setGoogleAccessToken(null);
       localStorage.removeItem('google_drive_token');

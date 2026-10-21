@@ -52,10 +52,11 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
     
     setIsLoading(true);
     try {
+      const idToken = await auth.currentUser.getIdToken();
       const response = await fetch('/api/admin/stats', {
         headers: {
           'x-user-id': auth.currentUser.uid,
-          'x-user-email': auth.currentUser.email || '',
+          Authorization: `Bearer ${idToken}`,
         }
       });
 

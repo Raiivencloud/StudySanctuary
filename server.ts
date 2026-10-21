@@ -11,7 +11,6 @@ import path from "path";
 import session from "express-session";
 import cookieParser from "cookie-parser";
 import axios from "axios";
-import multer from "multer";
 import compression from "compression";
 import "dotenv/config";
 import admin from "firebase-admin";
@@ -19,6 +18,12 @@ import { getFirestore } from "firebase-admin/firestore";
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { loadServerConfig, ConfigError, type ServerConfig } from "./server/config";
 import { createAiProxyRouter } from "./server/ai/geminiProxy";
+import { createAdminRouter } from "./server/routes/admin";
+import { createStorageUploadRouter, createUploadMiddleware } from "./server/routes/storageUpload";
+import { createOAuthRouter } from "./server/routes/oauth";
+import { createRateLimiter, ipKey } from "./server/security/rateLimit";
+import { securityHeaders, requireSameOrigin, apiErrorHandler, logError } from "./server/security/http";
+import type { OAuthStateStore } from "./server/security/oauthState";
 
 // Load configuration from environment variables (see .env.example)
 let serverConfig: ServerConfig;
@@ -64,8 +69,6 @@ const storageAdmin = admin.storage();
 // Initialize Mercado Pago
 const MP_PUBLIC_KEY = process.env.MERCADOPAGO_PUBLIC_KEY || "";
 
-const upload = multer({ storage: multer.memoryStorage() });
-
 declare module 'express-session' {
   interface SessionData {
     googleTokens?: {
@@ -78,6 +81,7 @@ declare module 'express-session' {
       refresh_token?: string;
       expiry_date?: number;
     };
+    oauthState?: OAuthStateStore;
   }
 }
 
@@ -95,18 +99,34 @@ interface Exam {
 async function startServer() {
   const app = express();
   const PORT = 3000;
+  const verifyIdToken = (token: string) => admin.auth().verifyIdToken(token);
+  const authOptions = { verifyIdToken, adminEmails: serverConfig.admin.emails };
+  const SESSION_COOKIE_NAME = "connect.sid";
 
+  app.disable("x-powered-by");
+  if (serverConfig.trustProxy > 0) {
+    // Cloud Run terminates TLS in front of the container: needed for secure cookies and req.ip.
+    app.set("trust proxy", serverConfig.trustProxy);
+  }
+  app.use(securityHeaders(serverConfig.isProduction));
   app.use(compression()); // Enable Gzip/Brotli compression
+
+  // General API rate limit per IP (the Mercado Pago webhook is excluded so retries are never dropped).
+  app.use("/api", createRateLimiter({
+    windowMs: 60 * 1000,
+    max: serverConfig.rateLimit.apiPerMinute,
+    key: (req) => (req.path === "/mercadopago-webhook" ? null : ipKey(req)),
+  }));
 
   // Server-side Gemini proxy (disabled unless AI_PROXY_ENABLED=true). Mounted before the
   // global JSON parser because it needs a larger body limit for multimodal requests.
   app.use("/api/ai", createAiProxyRouter({
     enabled: serverConfig.ai.proxyEnabled,
     apiKey: serverConfig.ai.geminiApiKey,
-    verifyIdToken: (token) => admin.auth().verifyIdToken(token),
+    verifyIdToken,
   }));
 
-  app.use(express.json());
+  app.use(express.json({ limit: "100kb" }));
   app.use(cookieParser());
   
   // Health check endpoint
@@ -169,142 +189,20 @@ async function startServer() {
     next();
   });
 
-  app.get("/api/admin/stats", async (req, res) => {
-    const userEmail = req.headers['x-user-email'] as string;
-    const adminEmail = "Agusgestro17@gmail.com";
+  // Admin API (Firebase ID token + admin claim or verified email in ADMIN_EMAILS)
+  app.use("/api/admin", createAdminRouter({
+    auth: authOptions,
+    adminSecretKey: serverConfig.admin.secretKey,
+    db: dbAdmin as any,
+    getRuntimeStats: () => ({
+      activeUsers: activeUsers.size,
+      requestHistory,
+      totalRequestsToday,
+      historyWindowMs: MAX_HISTORY_MS,
+    }),
+  }));
 
-    if (userEmail !== adminEmail) {
-      return res.status(403).json({ error: "Unauthorized access to Admin Dashboard" });
-    }
-
-    try {
-      const now = Date.now();
-      const last24h = admin.firestore.Timestamp.fromMillis(now - 24 * 60 * 60 * 1000);
-
-      // 1. Subscription Stats
-      const usersSnapshot = await dbAdmin.collection('users').get();
-      const stats = {
-        total: usersSnapshot.size,
-        free: 0,
-        mensual: 0,
-        trimestral: 0,
-        anual: 0,
-        activeSubscribers: 0
-      };
-
-      usersSnapshot.forEach(doc => {
-        const data = doc.data();
-        const sub = data.subscription;
-        if (sub && sub.status === 'active') {
-          stats.activeSubscribers++;
-          if (sub.type === 'mensual') stats.mensual++;
-          else if (sub.type === 'trimestral') stats.trimestral++;
-          else if (sub.type === 'anual') stats.anual++;
-        } else {
-          stats.free++;
-        }
-      });
-
-      // 2. Credit Consumption (Last 24h)
-      const statsDoc = await dbAdmin.collection('stats').doc('global').get();
-      const statsData = statsDoc.data() || {};
-      const today = new Date().toISOString().split('T')[0];
-      const yesterday = new Date(now - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
-      const creditsToday = statsData[`credits_${today}`] || 0;
-      const creditsYesterday = statsData[`credits_${yesterday}`] || 0;
-      const totalCreditsConsumed = creditsToday + creditsYesterday; // Approximate 24h
-      const isAiSuspendedForFree = statsData.isAiSuspendedForFree || false;
-
-      // 3. Request History (Bucketed by minute for the last hour)
-      const bucketSize = 60 * 1000; // 1 minute
-      const buckets: Record<number, number> = {};
-      const oneHourAgo = now - MAX_HISTORY_MS;
-
-      // Initialize buckets
-      for (let i = 0; i < 60; i++) {
-        const bucketTime = Math.floor((oneHourAgo + i * bucketSize) / bucketSize) * bucketSize;
-        buckets[bucketTime] = 0;
-      }
-
-      requestHistory.forEach(timestamp => {
-        const bucketTime = Math.floor(timestamp / bucketSize) * bucketSize;
-        if (buckets[bucketTime] !== undefined) {
-          buckets[bucketTime]++;
-        }
-      });
-
-      const requestGraphData = Object.entries(buckets)
-        .map(([time, count]) => ({ time: parseInt(time), count }))
-        .sort((a, b) => a.time - b.time);
-
-      // Estimated cost calculation ($0.0001 per request as a safe average)
-      const estimatedCost = totalRequestsToday * 0.0001;
-
-      res.json({
-        activeUsers: activeUsers.size,
-        subscriptionStats: stats,
-        creditsConsumed24h: totalCreditsConsumed,
-        requestGraphData,
-        totalRequestsToday,
-        estimatedCost,
-        isAiSuspendedForFree,
-        serverTime: now
-      });
-    } catch (error: any) {
-      console.error("[Admin] Stats error:", error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/admin/verify-key", (req, res) => {
-    const { key } = req.body;
-    const adminKey = process.env.ADMIN_SECRET_KEY;
-    
-    if (!adminKey) {
-      return res.status(500).json({ error: "ADMIN_SECRET_KEY not configured on server" });
-    }
-    
-    if (key === adminKey) {
-      res.json({ success: true });
-    } else {
-      res.status(401).json({ error: "Invalid Admin Key" });
-    }
-  });
-
-  app.post("/api/admin/toggle-ai", async (req, res) => {
-    const { key, suspend } = req.body;
-    const adminKey = process.env.ADMIN_SECRET_KEY;
-    
-    if (key !== adminKey) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    try {
-      await dbAdmin.collection('stats').doc('global').set({
-        isAiSuspendedForFree: suspend
-      }, { merge: true });
-      
-      res.json({ success: true, isAiSuspendedForFree: suspend });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-  
-  app.get("/api/admin/list-buckets", async (req, res) => {
-    try {
-      const storage = admin.storage();
-      const gcs = storage.bucket().storage;
-      const [buckets] = await gcs.getBuckets();
-      res.json({ buckets: buckets.map(b => b.name) });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message, projectId: admin.apps[0]?.options.projectId });
-    }
-  });
-  
-  // Normalize APP_URL
-  const rawAppUrl = process.env.APP_URL || "";
-  const APP_URL = rawAppUrl.endsWith('/') ? rawAppUrl.slice(0, -1) : rawAppUrl;
+  const APP_URL = serverConfig.appUrl;
   
   console.log(`[Server] Starting with APP_URL: ${APP_URL}`);
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
@@ -312,248 +210,45 @@ async function startServer() {
   }
 
   app.use(session({
+    name: SESSION_COOKIE_NAME,
     secret: serverConfig.session.secret,
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false, // Only store sessions that hold data (OAuth tokens/state)
     cookie: {
-      secure: true, // Required for SameSite=None
-      sameSite: 'none', // Required for cross-origin iframe
+      secure: serverConfig.session.cookieSecure, // HTTPS only in production (required for SameSite=None)
+      sameSite: serverConfig.session.cookieSameSite, // "none" only needed for cross-site iframes
       httpOnly: true,
+      maxAge: serverConfig.session.maxAgeMs,
     }
   }));
 
 
-  // Firebase Storage CORS fix
-  app.get("/api/admin/fix-cors", async (req, res) => {
-    const bucketNames = [
+  // Server-side upload proxy (fallback for CORS issues): authenticated, users/<uid>/ only, size-limited
+  app.use("/api/storage/upload", createStorageUploadRouter({
+    auth: authOptions,
+    maxBytes: serverConfig.uploads.maxBytes,
+    bucketNames: [
       serverConfig.firebase.storageBucket,
       `${serverConfig.firebase.projectId}.firebasestorage.app`,
       `${serverConfig.firebase.projectId}.appspot.com`,
       serverConfig.firebase.projectId,
       'ai-studio-applet-webapp-6cc37.firebasestorage.app',
       'ai-studio-applet-webapp-6cc37.appspot.com'
-    ].filter(Boolean);
+    ].filter(Boolean) as string[],
+    getBucket: (name) => storageAdmin.bucket(name),
+  }));
 
-    let lastError = null;
-    let successBucket = null;
-
-    for (const bucketName of bucketNames) {
-      try {
-        console.log(`[Server] Attempting to fix CORS for bucket: ${bucketName}`);
-        const bucket = storageAdmin.bucket(bucketName);
-        await bucket.setCorsConfiguration([
-          {
-            maxAgeSeconds: 3600,
-            method: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD'],
-            origin: ['*'],
-            responseHeader: ['Content-Type', 'Authorization', 'x-goog-resumable', 'x-goog-meta-fileid'],
-          },
-        ]);
-        console.log(`[Server] Firebase Storage CORS updated successfully for bucket: ${bucketName}`);
-        successBucket = bucketName;
-        break;
-      } catch (error: any) {
-        console.warn(`[Server] Failed to update CORS for bucket ${bucketName}:`, error.message);
-        lastError = error;
-        if (error.message.includes("does not exist")) continue;
-        break;
-      }
-    }
-
-    if (successBucket) {
-      res.json({ status: "CORS updated", bucket: successBucket });
-    } else {
-      res.status(500).json({ error: lastError?.message || "Failed to update CORS", triedBuckets: bucketNames });
-    }
-  });
-
-  // Server-side upload proxy (fallback for CORS issues)
-  app.post("/api/storage/upload", upload.single('file'), async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    const { path: storagePath } = req.body;
-    if (!storagePath) return res.status(400).json({ error: "No storage path provided" });
-
-    // Try multiple bucket name variations if the first one fails
-    const bucketNames = [
-      serverConfig.firebase.storageBucket,
-      `${serverConfig.firebase.projectId}.firebasestorage.app`,
-      `${serverConfig.firebase.projectId}.appspot.com`,
-      serverConfig.firebase.projectId,
-      'ai-studio-applet-webapp-6cc37.firebasestorage.app',
-      'ai-studio-applet-webapp-6cc37.appspot.com'
-    ].filter(Boolean);
-
-    let lastError = null;
-    for (const bucketName of bucketNames) {
-      try {
-        console.log(`[Server] Attempting proxy upload to bucket: ${bucketName}`);
-        const bucket = storageAdmin.bucket(bucketName);
-        const file = bucket.file(storagePath);
-        
-        await file.save(req.file.buffer, {
-          metadata: {
-            contentType: req.file.mimetype,
-          },
-          resumable: false
-        });
-
-        try {
-          // Try signed URL first
-          const [url] = await file.getSignedUrl({
-            action: 'read',
-            expires: '03-09-2491' // Far future
-          });
-          console.log(`[Server] Proxy upload success (signed URL) using bucket: ${bucketName}`);
-          return res.json({ url });
-        } catch (signedUrlError: any) {
-          if (signedUrlError.message?.includes('IAM Service Account Credentials API') || signedUrlError.code === 403) {
-            console.error(`\n[Server] CRITICAL: IAM Service Account Credentials API is not enabled.`);
-            console.error(`[Server] ACTION REQUIRED: Visit this link to enable it: https://console.developers.google.com/apis/api/iamcredentials.googleapis.com/overview?project=${serverConfig.firebase.projectId}`);
-            console.error(`[Server] Fallback: Making file public until API is enabled.\n`);
-          }
-          console.warn(`[Server] Failed to get signed URL for bucket ${bucketName}, making public instead:`, signedUrlError.message);
-          await file.makePublic();
-          console.log(`[Server] File made public successfully: ${storagePath}`);
-          const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
-          console.log(`[Server] Proxy upload success (public URL) using bucket: ${bucketName}`);
-          return res.json({ url: publicUrl });
-        }
-      } catch (error: any) {
-        console.warn(`[Server] Failed upload attempt for bucket ${bucketName}:`, error.message);
-        lastError = error;
-        if (error.message.includes("does not exist")) continue;
-        break; // If it's not a "not exist" error, stop trying other buckets
-      }
-    }
-
-    console.error("[Server] All proxy upload attempts failed:", lastError);
-    res.status(500).json({ 
-      error: lastError?.message || "All upload attempts failed", 
-      triedBuckets: bucketNames 
-    });
-  });
-
-  // OAuth URL construction
-  app.get("/api/auth/google/url", (req, res) => {
-    const redirectUri = `${APP_URL}/auth/google/callback`;
-    const params = new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID || "",
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.readonly",
-      access_type: "offline",
-      prompt: "consent"
-    });
-
-    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
-    console.log(`[OAuth] Generating Google Auth URL with redirect_uri: ${redirectUri}`);
-    res.json({ url: googleAuthUrl });
-  });
-
-  app.get("/api/auth/outlook/url", (req, res) => {
-    const redirectUri = `${APP_URL}/auth/outlook/callback`;
-    const params = new URLSearchParams({
-      client_id: process.env.OUTLOOK_CLIENT_ID || "",
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: "offline_access Calendars.Read",
-      response_mode: "query"
-    });
-
-    const outlookAuthUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`;
-    res.json({ url: outlookAuthUrl });
-  });
-
-  // Sync Firebase Google token to session
-  app.post("/api/auth/google/sync", (req, res) => {
-    const { accessToken } = req.body;
-    if (!accessToken) return res.status(400).json({ error: "No access token provided" });
-    
-    req.session.googleTokens = {
-      access_token: accessToken,
-      expiry_date: Date.now() + 3600 * 1000 // Assume 1 hour for Firebase tokens
-    };
-    
-    res.json({ status: "ok" });
-  });
-
-  // OAuth Callback
-  app.get("/auth/google/callback", async (req, res) => {
-    const { code } = req.query;
-    
-    if (!code) return res.status(400).send("No code provided");
-
-    try {
-      const response = await axios.post("https://oauth2.googleapis.com/token", {
-        code,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: `${APP_URL}/auth/google/callback`,
-        grant_type: "authorization_code"
-      });
-
-      req.session.googleTokens = response.data;
-      console.log("[OAuth] Google tokens received and stored in session");
-      
-      res.send(`
-        <html>
-          <body>
-            <script>
-              if (window.opener) {
-                window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', provider: 'google' }, '*');
-                window.close();
-              } else {
-                window.location.href = '/';
-              }
-            </script>
-            <p>Authentication successful. This window should close automatically.</p>
-          </body>
-        </html>
-      `);
-    } catch (error: any) {
-      console.error("Google OAuth error:", error.response?.data || error.message);
-      res.status(500).send("Authentication failed");
-    }
-  });
-
-  app.get("/auth/outlook/callback", async (req, res) => {
-    const { code } = req.query;
-    
-    if (!code) return res.status(400).send("No code provided");
-
-    try {
-      const response = await axios.post("https://login.microsoftonline.com/common/oauth2/v2.0/token", new URLSearchParams({
-        code: code as string,
-        client_id: process.env.OUTLOOK_CLIENT_ID || "",
-        client_secret: process.env.OUTLOOK_CLIENT_SECRET || "",
-        redirect_uri: `${APP_URL}/auth/outlook/callback`,
-        grant_type: "authorization_code"
-      }).toString(), {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" }
-      });
-
-      req.session.outlookTokens = response.data;
-      
-      res.send(`
-        <html>
-          <body>
-            <script>
-              if (window.opener) {
-                window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', provider: 'outlook' }, '*');
-                window.close();
-              } else {
-                window.location.href = '/';
-              }
-            </script>
-            <p>Authentication successful. This window should close automatically.</p>
-          </body>
-        </html>
-      `);
-    } catch (error: any) {
-      console.error("Outlook OAuth error:", error.response?.data || error.message);
-      res.status(500).send("Authentication failed");
-    }
-  });
+  // OAuth (Google/Outlook) with single-use state, session sync and logout
+  app.use(createOAuthRouter({
+    appUrl: APP_URL,
+    google: { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET },
+    outlook: { clientId: process.env.OUTLOOK_CLIENT_ID, clientSecret: process.env.OUTLOOK_CLIENT_SECRET },
+    sessionCookie: {
+      name: SESSION_COOKIE_NAME,
+      secure: serverConfig.session.cookieSecure,
+      sameSite: serverConfig.session.cookieSameSite,
+    },
+  }));
 
   // Sync endpoint
   app.get("/api/calendar/sync", async (req, res) => {
@@ -718,7 +413,20 @@ async function startServer() {
     }
   });
 
-  app.post("/api/drive/upload", upload.single('file'), async (req, res) => {
+  const driveUploadLimiter = createRateLimiter({
+    windowMs: 10 * 60 * 1000,
+    max: 60,
+    key: (req) => `drive-upload:${ipKey(req)}`,
+  });
+  // Checked before multer so requests without a Google session are never buffered in memory.
+  const requireGoogleSession: express.RequestHandler = (req, res, next) => {
+    if (!req.session.googleTokens?.access_token) {
+      return res.status(401).json({ error: "Google not connected" });
+    }
+    next();
+  };
+
+  app.post("/api/drive/upload", requireSameOrigin(APP_URL), driveUploadLimiter, requireGoogleSession, createUploadMiddleware(serverConfig.uploads.maxBytes), async (req, res) => {
     if (!req.session.googleTokens?.access_token) {
       return res.status(401).json({ error: "Google not connected" });
     }
@@ -765,7 +473,9 @@ async function startServer() {
   });
 
   // Mercado Pago Integration
-  app.post("/api/create-preference", async (req, res) => {
+  const preferenceLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10, key: ipKey });
+
+  app.post("/api/create-preference", preferenceLimiter, async (req, res) => {
     const { planId, userId, userEmail } = req.body;
     
     if (!userId || !planId) {
@@ -828,9 +538,8 @@ async function startServer() {
 
       res.json({ id: result.id, init_point: result.init_point });
     } catch (error: any) {
-      console.error("Mercado Pago Preference Error:", error);
-      const errorMessage = error.message || "Error desconocido al crear la preferencia";
-      res.status(500).json({ error: `Error de Mercado Pago: ${errorMessage}` });
+      logError("Mercado Pago preference", error);
+      res.status(500).json({ error: "Error de Mercado Pago: no se pudo crear la preferencia de pago." });
     }
   });
 
@@ -892,6 +601,9 @@ async function startServer() {
     res.status(200).send("OK");
   });
 
+  // JSON errors for the API (no stack traces or internal messages)
+  app.use("/api", apiErrorHandler);
+
   // Aggressive caching for public assets (textures, icons, etc.)
   app.use('/assets', express.static(path.join(process.cwd(), 'public/assets'), {
     maxAge: '1y',
@@ -944,6 +656,9 @@ async function startServer() {
     } catch (e: any) {
       console.error("[Server] Failed to get default bucket:", e.message);
     }
+
+    // Rewriting the bucket CORS policy (origin "*") is opt-in: STORAGE_CORS_ON_STARTUP=true
+    if (!serverConfig.storage.corsOnStartup) return;
 
     // Attempt to fix CORS on startup using multiple bucket variations
     const bucketNames = [

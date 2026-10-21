@@ -141,8 +141,8 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
     }
 
     const handleMessage = (event: MessageEvent) => {
-      const origin = event.origin;
-      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) return;
+      // The OAuth popup is served by this same app, so only same-origin messages are accepted
+      if (event.origin !== window.location.origin) return;
 
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS' && event.data?.provider === 'google') {
         fetchFiles();
