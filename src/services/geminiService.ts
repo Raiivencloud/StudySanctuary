@@ -197,12 +197,30 @@ export const generatePodcastAudio = async (userId: string, script: string, billi
   }
 };
 
+// Shape expected by MultimediaGenerator (marker, popup and side panel).
+const LOCATION_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    name: { type: 'STRING' },
+    lat: { type: 'NUMBER' },
+    lon: { type: 'NUMBER' },
+    weather: { type: 'STRING' },
+    localTime: { type: 'STRING' },
+    funFact: { type: 'STRING' },
+  },
+  required: ['name', 'lat', 'lon', 'weather', 'localTime', 'funFact'],
+};
+
+const LOCATION_FIELDS = `Responde en JSON con: name (nombre del lugar), lat y lon (coordenadas decimales), weather (clima típico, breve), localTime (zona horaria u hora local aproximada) y funFact (un dato curioso).`;
+
 export const identifyLocation = async (userId: string, lat: number, lon: number, language: string, billing?: AiBilling) => {
-  return await callGemini(`Identifica la ubicación: Lat: ${lat}, Lon: ${lon}. Idioma: ${language}.`, {}, undefined, billing);
+  const result = await callGemini(`Identifica la ubicación: Lat: ${lat}, Lon: ${lon}. Idioma: ${language}. ${LOCATION_FIELDS}`, { responseMimeType: "application/json", responseSchema: LOCATION_SCHEMA }, undefined, billing);
+  return typeof result === 'string' ? extractJSON(result) : result;
 };
 
 export const searchLocation = async (userId: string, query: string, language: string, billing?: AiBilling) => {
-  return await callGemini(`Busca información sobre: ${query}. Idioma: ${language}.`, {}, undefined, billing);
+  const result = await callGemini(`Busca información sobre: ${query}. Idioma: ${language}. ${LOCATION_FIELDS}`, { responseMimeType: "application/json", responseSchema: LOCATION_SCHEMA }, undefined, billing);
+  return typeof result === 'string' ? extractJSON(result) : result;
 };
 
 export const generateImage = async (prompt: string) => {

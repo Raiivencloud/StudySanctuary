@@ -18,7 +18,18 @@ import { generateArenaQuestions } from './geminiService';
 
 import { ARENA_BASE_CARDS } from '../constants';
 
-export const getArenaUserStats = async (userId: string): Promise<ArenaUserStats> => {
+// One load per user at a time: two overlapping first visits would both write the initial cards.
+const pendingStatsLoads = new Map<string, Promise<ArenaUserStats>>();
+
+export const getArenaUserStats = (userId: string): Promise<ArenaUserStats> => {
+  const pending = pendingStatsLoads.get(userId);
+  if (pending) return pending;
+  const load = loadArenaUserStats(userId).finally(() => pendingStatsLoads.delete(userId));
+  pendingStatsLoads.set(userId, load);
+  return load;
+};
+
+const loadArenaUserStats = async (userId: string): Promise<ArenaUserStats> => {
   const statsRef = doc(db, 'arena_stats', userId);
   try {
     const statsDoc = await getDoc(statsRef);

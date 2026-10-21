@@ -53,6 +53,16 @@ export const Dashboard: React.FC<{
     if (user) {
       getUserCredits(user.uid).then(data => setCredits(data.credits));
     }
+
+    // Same as Sidebar: follow the server balance after AI actions, the trial or a retried first load
+    const handleCreditsUpdate = (event: any) => {
+      if (event.detail && typeof event.detail.credits === 'number') {
+        setCredits(event.detail.credits);
+      }
+    };
+
+    window.addEventListener('creditsUpdated', handleCreditsUpdate);
+    return () => window.removeEventListener('creditsUpdated', handleCreditsUpdate);
   }, [user]);
 
   // Focus Timer State
