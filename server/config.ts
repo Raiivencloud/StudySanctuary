@@ -42,6 +42,11 @@ export interface ServerConfig {
     /** Rewrite the bucket CORS policy on startup (previous behavior). Off by default. */
     corsOnStartup: boolean;
   };
+  csp: {
+    /** "report-only" (default: reports, never blocks) or "off". */
+    mode: "report-only" | "off";
+    firebaseAuthDomain?: string;
+  };
   ai: {
     /** Server-side Gemini proxy (/api/ai/*). Disabled by default. */
     proxyEnabled: boolean;
@@ -134,6 +139,11 @@ export function loadServerConfig(env: Env = process.env): ServerConfig {
   const uploadMaxBytes = readPositiveInt(env, "UPLOAD_MAX_BYTES", DEFAULT_UPLOAD_MAX_BYTES, problems);
   const apiPerMinute = readPositiveInt(env, "RATE_LIMIT_API_PER_MINUTE", 300, problems);
 
+  const cspRaw = read(env, "CSP_MODE").toLowerCase() || "report-only";
+  if (cspRaw !== "report-only" && cspRaw !== "off") {
+    problems.push("CSP_MODE debe ser report-only u off (el modo que bloquea se habilitará después de revisar los reportes).");
+  }
+
   const proxyEnabled = read(env, "AI_PROXY_ENABLED") === "true";
   const geminiApiKey = read(env, "GEMINI_API_KEY") || undefined;
   if (proxyEnabled && !geminiApiKey) {
@@ -162,6 +172,10 @@ export function loadServerConfig(env: Env = process.env): ServerConfig {
     uploads: { maxBytes: uploadMaxBytes },
     rateLimit: { apiPerMinute },
     storage: { corsOnStartup: read(env, "STORAGE_CORS_ON_STARTUP") === "true" },
+    csp: {
+      mode: cspRaw === "off" ? "off" : "report-only",
+      firebaseAuthDomain: read(env, "VITE_FIREBASE_AUTH_DOMAIN") || undefined,
+    },
     ai: { proxyEnabled, geminiApiKey },
   };
 }

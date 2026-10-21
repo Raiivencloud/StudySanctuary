@@ -122,3 +122,18 @@ Cuerpos de petición: `express.json` con el límite explícito de 100 kB (el mis
 | 2-F | Revocar el acceso público de los objetos creados con `makePublic()` | Modifica objetos de producción; las URLs públicas guardadas dejarían de funcionar si no se migran |
 | 2-G | Eliminar los scripts de diagnóstico de la raíz (`dump-env.ts` imprime **todas** las variables, incluidos los secretos) | Ninguna para el producto; son herramientas de desarrollo |
 | 2-H | `create-preference` con ID Token y `userId` tomado del token | Cambia el flujo de pago → Fase 5 |
+
+---
+
+## Seguimiento de las decisiones (rama `security-followups`)
+
+| ID | Decisión | Estado |
+|---|---|---|
+| 2-A | Aprobado preparar el mecanismo | **Hecho.** `scripts/ops/admin-claims.ts` (simulación por defecto, `--apply` explícito, solo emails verificados, conserva los demás claims); el cliente muestra el menú de admin con el claim `admin` o con el email heredado (`src/config/admin.ts`). Probado en el emulador de Auth. **No se modificó ningún usuario de producción.** |
+| 2-B | Pospuesto | Alternativa documentada en [`SESSIONS_LOW_COST.md`](./SESSIONS_LOW_COST.md). Con 2-C, la sesión solo guarda el `state` de OAuth (10 min). |
+| 2-C | Aprobado, local y con pruebas | **Hecho.** Los tokens de Google y Outlook se guardan por uid (`IntegrationTokenStore`); Drive y Calendar exigen el ID Token; el `state` de OAuth está ligado al uid; el token de Google ya no se guarda en `localStorage` (se borra el que dejaron versiones anteriores); la descarga desde Drive usa `fetch` autenticado. Sin cuentas reales: las APIs de Google y Microsoft son simuladas en las pruebas. |
+| 2-D | Aprobado en modo Report-Only | **Hecho.** `Content-Security-Policy-Report-Only` y `/api/csp-report` (solo orígenes, sin rutas ni tokens, sin duplicados, con rate limit). Verificado con Chromium en la landing a 375, 768 y 1440 px: 0 violaciones. Incluye `frame-ancestors 'self'`, que permite detectar si la app se usa dentro de iframes (dato para 2-E). |
+| 2-E | Pospuesto | Sin cambios. Los reportes de `frame-ancestors` van a mostrar si hay iframes de terceros. |
+| 2-F | Pospuesto | Sin cambios en archivos existentes. |
+| 2-G | Aprobado | **Hecho.** Eliminados 8 scripts de la raíz; reemplazados por herramientas seguras en `scripts/ops/` ([`ops/README.md`](./ops/README.md)). |
+| 2-H | Para la Fase 5 | Sin cambios. |

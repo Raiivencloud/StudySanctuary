@@ -3,6 +3,7 @@ import { X, FileText, Download, Loader2, ExternalLink, Upload, Plus, BrainCircui
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { authFetch, downloadWithAuth } from '../lib/authFetch';
 
 interface DriveFile {
   id: string;
@@ -35,14 +36,14 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
     try {
       // First try to sync token if we have it in context but not in session
       if (googleAccessToken) {
-        await fetch('/api/auth/google/sync', {
+        await authFetch('/api/auth/google/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ accessToken: googleAccessToken })
         });
       }
 
-      const response = await fetch('/api/drive/files');
+      const response = await authFetch('/api/drive/files');
       if (response.ok) {
         const data = await response.json();
         setFiles(data.files);
@@ -69,7 +70,7 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/drive/upload', {
+      const response = await authFetch('/api/drive/upload', {
         method: 'POST',
         body: formData
       });
@@ -113,7 +114,7 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
 
   const handleConnect = async () => {
     try {
-      const response = await fetch('/api/auth/google/url');
+      const response = await authFetch('/api/auth/google/url');
       if (!response.ok) throw new Error('Failed to get auth URL');
       const { url } = await response.json();
       
@@ -156,7 +157,7 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
   const handleSelect = async (file: DriveFile) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/drive/download/${file.id}`);
+      const response = await authFetch(`/api/drive/download/${file.id}`);
       if (!response.ok) throw new Error('Download failed');
       
       const blob = await response.blob();
@@ -184,7 +185,10 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
   };
 
   const handleDownload = (fileId: string, fileName: string) => {
-    window.open(`/api/drive/download/${fileId}`, '_blank');
+    downloadWithAuth(`/api/drive/download/${fileId}`, fileName).catch((error) => {
+      console.error('Download error:', error);
+      toast.error('Error', { description: 'No se pudo descargar el archivo' });
+    });
     toast.success('Download started', { description: `Downloading ${fileName}` });
   };
 

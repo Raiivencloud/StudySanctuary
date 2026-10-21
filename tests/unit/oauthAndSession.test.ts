@@ -4,50 +4,62 @@ import express from "express";
 import session from "express-session";
 import { createOAuthRouter } from "../../server/routes/oauth";
 import { createOAuthState, consumeOAuthState, OAUTH_STATE_TTL_MS } from "../../server/security/oauthState";
-import { withApp } from "../helpers/http";
+import { InMemoryTokenStore } from "../../server/integrations/tokenStore";
+import { withApp, fakeVerifyIdToken } from "../helpers/http";
 
 // No calls to Google/Microsoft: the code exchange is a fake.
 function buildApp() {
   const exchanges: any[] = [];
+  const tokens = new InMemoryTokenStore(60_000);
   const app = express();
   app.use(express.json());
   app.use(session({ name: "connect.sid", secret: "test-secret", resave: false, saveUninitialized: false, cookie: { httpOnly: true } }));
   app.use(createOAuthRouter({
+    auth: { verifyIdToken: fakeVerifyIdToken },
+    tokens,
     appUrl: "https://app.example.com",
     google: { clientId: "google-client" },
     outlook: { clientId: "outlook-client" },
     sessionCookie: { name: "connect.sid", secure: false, sameSite: "lax" },
     exchangeCode: async (provider, code, redirectUri) => {
       exchanges.push({ provider, code, redirectUri });
-      return { access_token: `access-${provider}` };
+      return { access_token: `access-${provider}-${code}` };
     },
   }));
-  app.get("/test/session", (req, res) => res.json({ google: Boolean(req.session.googleTokens), outlook: Boolean(req.session.outlookTokens) }));
-  return { app, exchanges };
+  return { app, exchanges, tokens };
 }
 
 const cookieFrom = (res: Response) => (res.headers.get("set-cookie") || "").split(";")[0];
+const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-async function startFlow(base: string, provider: "google" | "outlook") {
-  const res = await fetch(`${base}/api/auth/${provider}/url`);
+async function startFlow(base: string, provider: "google" | "outlook", idToken = "token-user") {
+  const res = await fetch(`${base}/api/auth/${provider}/url`, { headers: bearer(idToken) });
   assert.equal(res.status, 200);
   const { url } = await res.json();
   const state = new URL(url).searchParams.get("state");
   return { cookie: cookieFrom(res), state, url: url as string };
 }
 
-test("oauth state helpers: single use, expiring, exact match", () => {
+test("oauth state helpers: single use, expiring, exact match, bound to the uid", () => {
   const store = {};
-  const state = createOAuthState(store, "google", 1000);
-  assert.equal(consumeOAuthState(store, "google", state, 1001), true);
-  assert.equal(consumeOAuthState(store, "google", state, 1002), false, "replay must fail");
+  const state = createOAuthState(store, "google", "user-1", 1000);
+  assert.equal(consumeOAuthState(store, "google", state, 1001), "user-1");
+  assert.equal(consumeOAuthState(store, "google", state, 1002), null, "replay must fail");
 
-  const expired = createOAuthState(store, "google", 0);
-  assert.equal(consumeOAuthState(store, "google", expired, OAUTH_STATE_TTL_MS + 1), false);
+  const expired = createOAuthState(store, "google", "user-1", 0);
+  assert.equal(consumeOAuthState(store, "google", expired, OAUTH_STATE_TTL_MS + 1), null);
 
-  const other = createOAuthState(store, "outlook", 0);
-  assert.equal(consumeOAuthState(store, "google", other, 1), false, "state is bound to the provider");
-  assert.equal(consumeOAuthState(undefined, "google", "x"), false);
+  const other = createOAuthState(store, "outlook", "user-1", 0);
+  assert.equal(consumeOAuthState(store, "google", other, 1), null, "state is bound to the provider");
+  assert.equal(consumeOAuthState(undefined, "google", "x"), null);
+});
+
+test("starting a connection requires a Firebase ID token", async () => {
+  const { app } = buildApp();
+  await withApp(app, async (base) => {
+    assert.equal((await fetch(`${base}/api/auth/google/url`)).status, 401);
+    assert.equal((await fetch(`${base}/api/auth/outlook/url`, { headers: bearer("forged") })).status, 401);
+  });
 });
 
 test("authorization URL includes a random state and keeps the previous parameters", async () => {
@@ -81,10 +93,10 @@ test("callback without a valid state is rejected before exchanging the code", as
   });
 });
 
-test("valid callback stores tokens, posts only to its own origin and the state cannot be replayed", async () => {
-  const { app, exchanges } = buildApp();
+test("valid callback stores tokens for the uid that started the flow; state cannot be replayed", async () => {
+  const { app, exchanges, tokens } = buildApp();
   await withApp(app, async (base) => {
-    const { cookie, state } = await startFlow(base, "outlook");
+    const { cookie, state } = await startFlow(base, "outlook", "token-user");
     const res = await fetch(`${base}/auth/outlook/callback?code=the-code&state=${state}`, { headers: { cookie } });
     assert.equal(res.status, 200);
     const html = await res.text();
@@ -92,8 +104,8 @@ test("valid callback stores tokens, posts only to its own origin and the state c
     assert.doesNotMatch(html, /'\*'/);
     assert.deepEqual(exchanges, [{ provider: "outlook", code: "the-code", redirectUri: "https://app.example.com/auth/outlook/callback" }]);
 
-    const sessionState = await (await fetch(`${base}/test/session`, { headers: { cookie } })).json();
-    assert.deepEqual(sessionState, { google: false, outlook: true });
+    assert.deepEqual(await tokens.get("user-1", "outlook"), { access_token: "access-outlook-the-code" });
+    assert.equal(await tokens.get("user-2", "outlook"), null, "other users never receive these tokens");
 
     const replay = await fetch(`${base}/auth/outlook/callback?code=the-code&state=${state}`, { headers: { cookie } });
     assert.equal(replay.status, 400);
@@ -101,39 +113,55 @@ test("valid callback stores tokens, posts only to its own origin and the state c
   });
 });
 
-test("session endpoints reject cross-site requests (CSRF)", async () => {
-  const { app } = buildApp();
+test("token sync is bound to the signed-in uid and rejects cross-site requests", async () => {
+  const { app, tokens } = buildApp();
   await withApp(app, async (base) => {
-    const headers = { "Content-Type": "application/json", Origin: "https://evil.example" };
-    assert.equal((await fetch(`${base}/api/auth/google/sync`, { method: "POST", headers, body: JSON.stringify({ accessToken: "t" }) })).status, 403);
-    assert.equal((await fetch(`${base}/api/auth/logout`, { method: "POST", headers: { Origin: "https://evil.example" } })).status, 403);
+    const json = { "Content-Type": "application/json" };
+    const body = JSON.stringify({ accessToken: "google-access" });
 
-    // The configured APP_URL origin and same-origin requests are accepted.
+    assert.equal((await fetch(`${base}/api/auth/google/sync`, { method: "POST", headers: json, body })).status, 401);
+    assert.equal((await fetch(`${base}/api/auth/google/sync`, {
+      method: "POST", headers: { ...json, ...bearer("token-user"), Origin: "https://evil.example" }, body,
+    })).status, 403);
+
     const ok = await fetch(`${base}/api/auth/google/sync`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Origin: "https://app.example.com" },
-      body: JSON.stringify({ accessToken: "t" }),
+      method: "POST", headers: { ...json, ...bearer("token-user"), Origin: "https://app.example.com" }, body,
     });
     assert.equal(ok.status, 200);
+    assert.equal((await tokens.get("user-1", "google"))?.access_token, "google-access");
+    assert.equal(await tokens.get("user-2", "google"), null);
   });
 });
 
-test("logout destroys the server session (Drive/Calendar tokens)", async () => {
-  const { app } = buildApp();
-  await withApp(app, async (base) => {
-    const sync = await fetch(`${base}/api/auth/google/sync`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken: "t" }),
-    });
-    const cookie = cookieFrom(sync);
-    assert.deepEqual(await (await fetch(`${base}/test/session`, { headers: { cookie } })).json(), { google: true, outlook: false });
+test("logout forgets the user's tokens (only that user's) and clears the session cookie", async () => {
+  const { app, tokens } = buildApp();
+  await tokens.set("user-1", "google", { access_token: "a" });
+  await tokens.set("user-1", "outlook", { access_token: "b" });
+  await tokens.set("user-2", "google", { access_token: "c" });
 
-    const logout = await fetch(`${base}/api/auth/logout`, { method: "POST", headers: { cookie, Origin: base } });
+  await withApp(app, async (base) => {
+    assert.equal((await fetch(`${base}/api/auth/logout`, { method: "POST", headers: { Origin: "https://evil.example" } })).status, 403);
+    assert.equal((await tokens.get("user-1", "google"))?.access_token, "a");
+
+    const logout = await fetch(`${base}/api/auth/logout`, { method: "POST", headers: { ...bearer("token-user"), Origin: base } });
     assert.equal(logout.status, 204);
     assert.match(logout.headers.get("set-cookie") || "", /connect\.sid=;/);
 
-    // Even if the old cookie is replayed, the session no longer exists.
-    assert.deepEqual(await (await fetch(`${base}/test/session`, { headers: { cookie } })).json(), { google: false, outlook: false });
+    assert.equal(await tokens.get("user-1", "google"), null);
+    assert.equal(await tokens.get("user-1", "outlook"), null);
+    assert.equal((await tokens.get("user-2", "google"))?.access_token, "c");
+
+    // Logout without a token still succeeds (it only clears the cookie).
+    assert.equal((await fetch(`${base}/api/auth/logout`, { method: "POST" })).status, 204);
   });
+});
+
+test("InMemoryTokenStore expires entries after the TTL", async () => {
+  let now = 0;
+  const store = new InMemoryTokenStore(1000, () => now);
+  await store.set("u", "google", { access_token: "t" });
+  now = 999;
+  assert.equal((await store.get("u", "google"))?.access_token, "t");
+  now = 1000;
+  assert.equal(await store.get("u", "google"), null);
 });

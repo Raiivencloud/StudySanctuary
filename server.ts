@@ -19,10 +19,13 @@ import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { loadServerConfig, ConfigError, type ServerConfig } from "./server/config";
 import { createAiProxyRouter } from "./server/ai/geminiProxy";
 import { createAdminRouter } from "./server/routes/admin";
-import { createStorageUploadRouter, createUploadMiddleware } from "./server/routes/storageUpload";
+import { createStorageUploadRouter } from "./server/routes/storageUpload";
 import { createOAuthRouter } from "./server/routes/oauth";
+import { createIntegrationsRouter } from "./server/routes/integrations";
+import { InMemoryTokenStore } from "./server/integrations/tokenStore";
 import { createRateLimiter, ipKey } from "./server/security/rateLimit";
-import { securityHeaders, requireSameOrigin, apiErrorHandler, logError } from "./server/security/http";
+import { securityHeaders, apiErrorHandler, logError } from "./server/security/http";
+import { cspReportOnly, createCspReportRouter } from "./server/security/csp";
 import type { OAuthStateStore } from "./server/security/oauthState";
 
 // Load configuration from environment variables (see .env.example)
@@ -71,29 +74,9 @@ const MP_PUBLIC_KEY = process.env.MERCADOPAGO_PUBLIC_KEY || "";
 
 declare module 'express-session' {
   interface SessionData {
-    googleTokens?: {
-      access_token: string;
-      refresh_token?: string;
-      expiry_date?: number;
-    };
-    outlookTokens?: {
-      access_token: string;
-      refresh_token?: string;
-      expiry_date?: number;
-    };
+    // Only the short-lived OAuth state lives in the session; provider tokens are kept per uid.
     oauthState?: OAuthStateStore;
   }
-}
-
-interface Exam {
-  id: string;
-  title: string;
-  date: string;
-  time: string;
-  location: string;
-  type: 'Primary' | 'Secondary' | 'Finals' | 'Midterm' | 'Quiz';
-  tags: string[];
-  reminder?: 'none' | '1h' | '2h' | '1d' | '2d';
 }
 
 async function startServer() {
@@ -102,6 +85,7 @@ async function startServer() {
   const verifyIdToken = (token: string) => admin.auth().verifyIdToken(token);
   const authOptions = { verifyIdToken, adminEmails: serverConfig.admin.emails };
   const SESSION_COOKIE_NAME = "connect.sid";
+  const integrationTokens = new InMemoryTokenStore(serverConfig.session.maxAgeMs);
 
   app.disable("x-powered-by");
   if (serverConfig.trustProxy > 0) {
@@ -109,6 +93,10 @@ async function startServer() {
     app.set("trust proxy", serverConfig.trustProxy);
   }
   app.use(securityHeaders(serverConfig.isProduction));
+  if (serverConfig.csp.mode === "report-only") {
+    app.use(cspReportOnly({ firebaseAuthDomain: serverConfig.csp.firebaseAuthDomain }));
+    app.use("/api/csp-report", createCspReportRouter());
+  }
   app.use(compression()); // Enable Gzip/Brotli compression
 
   // General API rate limit per IP (the Mercado Pago webhook is excluded so retries are never dropped).
@@ -213,7 +201,7 @@ async function startServer() {
     name: SESSION_COOKIE_NAME,
     secret: serverConfig.session.secret,
     resave: false,
-    saveUninitialized: false, // Only store sessions that hold data (OAuth tokens/state)
+    saveUninitialized: false, // Sessions only hold the short-lived OAuth state
     cookie: {
       secure: serverConfig.session.cookieSecure, // HTTPS only in production (required for SameSite=None)
       sameSite: serverConfig.session.cookieSameSite, // "none" only needed for cross-site iframes
@@ -240,6 +228,8 @@ async function startServer() {
 
   // OAuth (Google/Outlook) with single-use state, session sync and logout
   app.use(createOAuthRouter({
+    auth: authOptions,
+    tokens: integrationTokens,
     appUrl: APP_URL,
     google: { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET },
     outlook: { clientId: process.env.OUTLOOK_CLIENT_ID, clientSecret: process.env.OUTLOOK_CLIENT_SECRET },
@@ -250,223 +240,13 @@ async function startServer() {
     },
   }));
 
-  // Sync endpoint
-  app.get("/api/calendar/sync", async (req, res) => {
-    const exams: any[] = [];
-
-    // Fetch from Google if connected
-    if (req.session.googleTokens?.access_token) {
-      try {
-        const response = await axios.get("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-          headers: { Authorization: `Bearer ${req.session.googleTokens.access_token}` },
-          params: {
-            timeMin: new Date().toISOString(),
-            maxResults: 10,
-            singleEvents: true,
-            orderBy: "startTime"
-          }
-        });
-
-        const googleExams = response.data.items.map((event: any) => {
-          let reminder: Exam['reminder'] = 'none';
-          const reminders = event.reminders;
-          
-          if (reminders && (reminders.useDefault || (reminders.overrides && reminders.overrides.length > 0))) {
-            // Default to 1d if useDefault is true, or check overrides
-            const minutes = reminders.overrides?.[0]?.minutes || 1440;
-            if (minutes <= 60) reminder = '1h';
-            else if (minutes <= 120) reminder = '2h';
-            else if (minutes <= 1440) reminder = '1d';
-            else reminder = '2d';
-          }
-
-          return {
-            id: `google-${event.id}`,
-            title: event.summary,
-            date: new Date(event.start.dateTime || event.start.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
-            time: new Date(event.start.dateTime || event.start.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-            location: event.location || "Google Calendar",
-            type: "Primary",
-            tags: ["Google Sync", !reminders || (!reminders.useDefault && (!reminders.overrides || reminders.overrides.length === 0)) ? "Reminders not synced" : ""].filter(Boolean),
-            reminder
-          };
-        });
-        exams.push(...googleExams);
-      } catch (error: any) {
-        console.error("Google Sync error:", error.response?.data || error.message);
-      }
-    }
-
-    // Fetch from Outlook if connected
-    if (req.session.outlookTokens?.access_token) {
-      try {
-        const response = await axios.get("https://graph.microsoft.com/v1.0/me/events", {
-          headers: { Authorization: `Bearer ${req.session.outlookTokens.access_token}` },
-          params: {
-            $select: "subject,start,location,isReminderOn,reminderMinutesBeforeStart",
-            $top: 10,
-            $orderby: "start/dateTime"
-          }
-        });
-
-        const outlookExams = response.data.value.map((event: any) => {
-          let reminder: Exam['reminder'] = 'none';
-          if (event.isReminderOn) {
-            const minutes = event.reminderMinutesBeforeStart || 15; // default 15m
-            if (minutes <= 60) reminder = '1h';
-            else if (minutes <= 120) reminder = '2h';
-            else if (minutes <= 1440) reminder = '1d';
-            else reminder = '2d';
-          }
-
-          return {
-            id: `outlook-${event.id}`,
-            title: event.subject,
-            date: new Date(event.start.dateTime).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
-            time: new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-            location: event.location?.displayName || "Outlook Calendar",
-            type: "Secondary",
-            tags: ["Outlook Sync", !event.isReminderOn ? "Reminders not synced" : ""].filter(Boolean),
-            reminder
-          };
-        });
-        exams.push(...outlookExams);
-      } catch (error: any) {
-        console.error("Outlook Sync error:", error.response?.data || error.message);
-      }
-    }
-
-    if (exams.length === 0 && !req.session.googleTokens && !req.session.outlookTokens) {
-      return res.status(401).json({ error: "No calendar connected" });
-    }
-
-    res.json({ exams });
-  });
-  
-  // Google Drive endpoints
-  app.get("/api/drive/files", async (req, res) => {
-    if (!req.session.googleTokens?.access_token) {
-      return res.status(401).json({ error: "Google not connected" });
-    }
-
-    try {
-      const response = await axios.get("https://www.googleapis.com/drive/v3/files", {
-        headers: { Authorization: `Bearer ${req.session.googleTokens.access_token}` },
-        params: {
-          pageSize: 20,
-          fields: "files(id, name, mimeType, iconLink, webViewLink, size)",
-          q: "trashed = false"
-        }
-      });
-
-      res.json({ files: response.data.files });
-    } catch (error: any) {
-      console.error("Google Drive list error:", error.response?.data || error.message);
-      res.status(500).json({ error: "Failed to list files" });
-    }
-  });
-
-  app.get("/api/drive/download/:fileId", async (req, res) => {
-    if (!req.session.googleTokens?.access_token) {
-      return res.status(401).json({ error: "Google not connected" });
-    }
-
-    const { fileId } = req.params;
-
-    try {
-      // Get file metadata first to check mimeType
-      const metadata = await axios.get(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-        headers: { Authorization: `Bearer ${req.session.googleTokens.access_token}` },
-        params: { fields: "name, mimeType" }
-      });
-
-      // If it's a Google Doc, we need to export it
-      if (metadata.data.mimeType.startsWith('application/vnd.google-apps.')) {
-        const exportMimeType = metadata.data.mimeType === 'application/vnd.google-apps.spreadsheet' 
-          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : 'application/pdf';
-          
-        const response = await axios.get(`https://www.googleapis.com/drive/v3/files/${fileId}/export`, {
-          headers: { Authorization: `Bearer ${req.session.googleTokens.access_token}` },
-          params: { mimeType: exportMimeType },
-          responseType: 'arraybuffer'
-        });
-        
-        res.setHeader('Content-Type', exportMimeType);
-        res.setHeader('Content-Disposition', `attachment; filename="${metadata.data.name}.pdf"`);
-        return res.send(response.data);
-      }
-
-      // Otherwise, download directly
-      const response = await axios.get(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-        headers: { Authorization: `Bearer ${req.session.googleTokens.access_token}` },
-        params: { alt: 'media' },
-        responseType: 'arraybuffer'
-      });
-
-      res.setHeader('Content-Type', metadata.data.mimeType);
-      res.setHeader('Content-Disposition', `attachment; filename="${metadata.data.name}"`);
-      res.send(response.data);
-    } catch (error: any) {
-      console.error("Google Drive download error:", error.response?.data || error.message);
-      res.status(500).json({ error: "Failed to download file" });
-    }
-  });
-
-  const driveUploadLimiter = createRateLimiter({
-    windowMs: 10 * 60 * 1000,
-    max: 60,
-    key: (req) => `drive-upload:${ipKey(req)}`,
-  });
-  // Checked before multer so requests without a Google session are never buffered in memory.
-  const requireGoogleSession: express.RequestHandler = (req, res, next) => {
-    if (!req.session.googleTokens?.access_token) {
-      return res.status(401).json({ error: "Google not connected" });
-    }
-    next();
-  };
-
-  app.post("/api/drive/upload", requireSameOrigin(APP_URL), driveUploadLimiter, requireGoogleSession, createUploadMiddleware(serverConfig.uploads.maxBytes), async (req, res) => {
-    if (!req.session.googleTokens?.access_token) {
-      return res.status(401).json({ error: "Google not connected" });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    try {
-      const metadata = {
-        name: req.file.originalname,
-        mimeType: req.file.mimetype
-      };
-
-      // Multipart upload requires a specific format
-      const boundary = '-------314159265358979323846';
-      const delimiter = `\r\n--${boundary}\r\n`;
-      const closeDelimiter = `\r\n--${boundary}--`;
-
-      const body = Buffer.concat([
-        Buffer.from(delimiter + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata)),
-        Buffer.from(delimiter + `Content-Type: ${req.file.mimetype}\r\n\r\n`),
-        req.file.buffer,
-        Buffer.from(closeDelimiter)
-      ]);
-
-      const response = await axios.post("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", body, {
-        headers: {
-          Authorization: `Bearer ${req.session.googleTokens.access_token}`,
-          'Content-Type': `multipart/related; boundary=${boundary}`,
-          'Content-Length': body.length
-        }
-      });
-
-      res.json({ status: "ok", fileId: response.data.id });
-    } catch (error: any) {
-      console.error("Google Drive upload error:", error.response?.data || error.message);
-      res.status(500).json({ error: "Failed to upload file" });
-    }
-  });
+  // Google Calendar / Drive and Outlook Calendar (ID token required; tokens bound to the uid)
+  app.use(createIntegrationsRouter({
+    auth: authOptions,
+    tokens: integrationTokens,
+    appUrl: APP_URL,
+    maxUploadBytes: serverConfig.uploads.maxBytes,
+  }));
 
   app.get('/success', (req, res) => {
     res.redirect('/?view=success');

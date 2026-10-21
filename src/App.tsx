@@ -37,6 +37,7 @@ import { VERSION } from './constants';
 import { clearAppCache } from './lib/cacheUtils';
 import { cn } from './lib/utils';
 import { useTheme } from './contexts/ThemeContext';
+import { useAuth } from './contexts/AuthContext';
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -47,6 +48,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const { theme, wallpaper } = useTheme();
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
     // Check for version update to clear cache
@@ -111,8 +113,6 @@ export default function App() {
   }
 
   if (!user) return <LandingView onLogin={() => {}} />;
-
-  const isAdmin = user.email === 'Agusgestro17@gmail.com';
 
   const handleCourseClick = (id: string) => {
     setSelectedCourseId(id);

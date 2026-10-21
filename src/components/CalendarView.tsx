@@ -18,6 +18,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { useCourses } from '../contexts/CourseContext';
+import { authFetch } from '../lib/authFetch';
 import { Exam, AppNotification, AIActivity } from '../types';
 import { cn } from '../lib/utils';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -118,7 +119,7 @@ export const CalendarView: React.FC = () => {
   const handleSyncCalendar = async (provider: 'google' | 'outlook') => {
     setIsSyncing(true);
     try {
-      const response = await fetch(`/api/auth/${provider}/url`);
+      const response = await authFetch(`/api/auth/${provider}/url`);
       if (!response.ok) throw new Error('Failed to get auth URL');
       const { url } = await response.json();
 
@@ -141,7 +142,7 @@ export const CalendarView: React.FC = () => {
 
   const fetchSyncedEvents = async () => {
     try {
-      const response = await fetch('/api/calendar/sync');
+      const response = await authFetch('/api/calendar/sync');
       if (response.ok) {
         const { exams: syncedExams } = await response.json();
         setExams(prev => {

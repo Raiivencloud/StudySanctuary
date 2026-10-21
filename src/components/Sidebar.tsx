@@ -48,7 +48,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isOpen, onClose }) => {
-  const { user, userProfile, logout } = useAuth();
+  const { user, userProfile, logout, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [credits, setCredits] = React.useState(0);
 
@@ -87,7 +87,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isO
     { id: 'settings', label: 'Configuración', icon: Settings, color: 'text-zinc-400' },
   ];
 
-  const isAdmin = user?.email === 'Agusgestro17@gmail.com';
   if (isAdmin) {
     navItems.push({ id: 'admin-dashboard', label: 'Admin Panel', icon: ShieldCheck, color: 'text-rose-500' });
   }

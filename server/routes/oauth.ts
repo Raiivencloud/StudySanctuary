@@ -1,13 +1,16 @@
 /**
- * OAuth for Google (Calendar/Drive) and Outlook (Calendar), plus session sync/logout.
- * Tokens are kept in the server session. Every authorization request carries a
- * single-use `state` stored in the session (protects against login CSRF).
+ * OAuth for Google (Calendar/Drive) and Outlook (Calendar), plus token sync/logout.
+ * Starting a flow requires a Firebase ID token; the single-use `state` (kept in the session
+ * cookie for up to 10 minutes) is bound to that uid, and the resulting provider tokens are
+ * stored for that uid only (IntegrationTokenStore). The session holds nothing else.
  */
 import { Router, type RequestHandler } from "express";
 import axios from "axios";
 import { createOAuthState, consumeOAuthState, type OAuthProvider } from "../security/oauthState";
 import { requireSameOrigin, logError } from "../security/http";
 import { createRateLimiter, ipKey } from "../security/rateLimit";
+import { requireUser, getUser, getBearerToken, type AuthOptions } from "../security/auth";
+import type { IntegrationTokenStore } from "../integrations/tokenStore";
 
 export interface OAuthClientConfig {
   clientId?: string;
@@ -17,6 +20,8 @@ export interface OAuthClientConfig {
 export type ExchangeCode = (provider: OAuthProvider, code: string, redirectUri: string) => Promise<any>;
 
 export interface OAuthRouterOptions {
+  auth: AuthOptions;
+  tokens: IntegrationTokenStore;
   appUrl: string;
   google: OAuthClientConfig;
   outlook: OAuthClientConfig;
@@ -42,6 +47,7 @@ export function createOAuthRouter(options: OAuthRouterOptions): Router {
   const router = Router();
   const sameOrigin = requireSameOrigin(options.appUrl);
   const oauthLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 30, key: ipKey });
+  const authenticate = requireUser(options.auth);
 
   const clientFor = (provider: OAuthProvider) => (provider === "google" ? options.google : options.outlook);
   const redirectUriFor = (provider: OAuthProvider) => `${options.appUrl}/auth/${provider}/callback`;
@@ -75,7 +81,7 @@ export function createOAuthRouter(options: OAuthRouterOptions): Router {
   const authUrlHandler = (provider: OAuthProvider): RequestHandler => (req, res) => {
     const config = PROVIDERS[provider];
     req.session.oauthState = req.session.oauthState || {};
-    const state = createOAuthState(req.session.oauthState, provider);
+    const state = createOAuthState(req.session.oauthState, provider, getUser(res).uid);
 
     const params = new URLSearchParams({
       client_id: clientFor(provider).clientId || "",
@@ -89,8 +95,8 @@ export function createOAuthRouter(options: OAuthRouterOptions): Router {
     res.json({ url: `${config.authorizeUrl}?${params}` });
   };
 
-  router.get("/api/auth/google/url", oauthLimiter, authUrlHandler("google"));
-  router.get("/api/auth/outlook/url", oauthLimiter, authUrlHandler("outlook"));
+  router.get("/api/auth/google/url", oauthLimiter, authenticate, authUrlHandler("google"));
+  router.get("/api/auth/outlook/url", oauthLimiter, authenticate, authUrlHandler("outlook"));
 
   // The popup and the app share the origin, so the message is restricted to it.
   const successPage = (provider: OAuthProvider) => `
@@ -112,19 +118,16 @@ export function createOAuthRouter(options: OAuthRouterOptions): Router {
   const callbackHandler = (provider: OAuthProvider): RequestHandler => async (req, res) => {
     const { code, state } = req.query;
 
-    if (!consumeOAuthState(req.session.oauthState, provider, state)) {
+    const uid = consumeOAuthState(req.session.oauthState, provider, state);
+    if (!uid) {
       return res.status(400).send("Invalid or expired authorization request. Close this window and try again.");
     }
     if (!code || typeof code !== "string") return res.status(400).send("No code provided");
 
     try {
       const tokens = await exchangeCode(provider, code, redirectUriFor(provider));
-      if (provider === "google") {
-        req.session.googleTokens = tokens;
-      } else {
-        req.session.outlookTokens = tokens;
-      }
-      console.log(`[OAuth] ${provider} tokens received and stored in session`);
+      await options.tokens.set(uid, provider, tokens);
+      console.log(`[OAuth] ${provider} tokens received and stored for uid=${uid}`);
       res.send(successPage(provider));
     } catch (error) {
       logError(`OAuth ${provider} callback`, error);
@@ -135,21 +138,31 @@ export function createOAuthRouter(options: OAuthRouterOptions): Router {
   router.get("/auth/google/callback", oauthLimiter, callbackHandler("google"));
   router.get("/auth/outlook/callback", oauthLimiter, callbackHandler("outlook"));
 
-  // Sync Firebase Google token to session
-  router.post("/api/auth/google/sync", sameOrigin, (req, res) => {
+  // Sync the Google token obtained at Firebase sign-in, for the signed-in uid
+  router.post("/api/auth/google/sync", sameOrigin, authenticate, async (req, res) => {
     const { accessToken } = req.body || {};
     if (!accessToken || typeof accessToken !== "string") return res.status(400).json({ error: "No access token provided" });
 
-    req.session.googleTokens = {
+    await options.tokens.set(getUser(res).uid, "google", {
       access_token: accessToken,
       expiry_date: Date.now() + 3600 * 1000 // Assume 1 hour for Firebase tokens
-    };
+    });
 
     res.json({ status: "ok" });
   });
 
-  // Destroys the server session (Google/Outlook tokens) when the user logs out.
-  router.post("/api/auth/logout", sameOrigin, (req, res) => {
+  // On logout: forget the user's Google/Outlook tokens and destroy the session cookie.
+  router.post("/api/auth/logout", sameOrigin, async (req, res) => {
+    const token = getBearerToken(req);
+    if (token) {
+      try {
+        const { uid } = await options.auth.verifyIdToken(token);
+        await options.tokens.deleteAll(uid);
+      } catch {
+        // Invalid/expired token: nothing to forget for an unknown user.
+      }
+    }
+
     const { name, secure, sameSite } = options.sessionCookie;
     req.session.destroy((error) => {
       if (error) logError("Session destroy", error);

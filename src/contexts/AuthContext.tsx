@@ -13,12 +13,15 @@ import { auth, db, googleProvider, appleProvider, logout as firebaseLogout, hand
 import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { UserProfile } from '../types';
+import { authFetch } from '../lib/authFetch';
+import { isAdminUser } from '../config/admin';
 
 interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
   googleAccessToken: string | null;
+  isAdmin: boolean;
   loginWithGoogle: () => Promise<void>;
   loginWithApple: () => Promise<void>;
   logout: () => Promise<void>;
@@ -31,7 +34,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(localStorage.getItem('google_drive_token'));
+  // Kept in memory only: the server stores it for this uid (no Google token in localStorage)
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     let retryCount = 0;
@@ -51,13 +56,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Set persistence once on mount
         await setPersistence(auth, browserLocalPersistence);
 
+        // Remove the Google token stored in localStorage by previous versions
+        localStorage.removeItem('google_drive_token');
+
         // Handle redirect results (for mobile fallback)
         const result = await getRedirectResult(auth);
         if (result) {
           const credential = GoogleAuthProvider.credentialFromResult(result);
           if (credential?.accessToken) {
             setGoogleAccessToken(credential.accessToken);
-            localStorage.setItem('google_drive_token', credential.accessToken);
+            authFetch('/api/auth/google/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ accessToken: credential.accessToken })
+            }).catch(console.error);
           }
           toast.success('¡Bienvenido!');
         }
@@ -167,19 +179,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         syncProfile();
 
-        // Sync Google token if exists
-        const token = localStorage.getItem('google_drive_token');
-        if (token) {
-          fetch('/api/auth/google/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ accessToken: token })
-          }).catch(console.error);
-        }
+        // Admin UI visibility: `admin` custom claim (or the legacy owner email)
+        setIsAdmin(isAdminUser(user.email, undefined));
+        user.getIdTokenResult()
+          .then((result) => setIsAdmin(isAdminUser(user.email, result.claims)))
+          .catch(() => undefined);
       } else {
         setUserProfile(null);
         setGoogleAccessToken(null);
-        localStorage.removeItem('google_drive_token');
+        setIsAdmin(false);
       }
       setLoading(false);
     });
@@ -249,11 +257,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleLogout = async () => {
     try {
-      // Destroy the server session (Google/Outlook tokens) so the next user of this browser can't reuse it
-      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+      // Forget this user's Google/Outlook tokens on the server and clear the session cookie
+      await authFetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
       await firebaseLogout();
       setGoogleAccessToken(null);
-      localStorage.removeItem('google_drive_token');
     } catch (error) {
       console.error("Logout error:", error);
       throw error;
@@ -266,6 +273,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userProfile,
       loading, 
       googleAccessToken,
+      isAdmin,
       loginWithGoogle: handleLoginWithGoogle, 
       loginWithApple: handleLoginWithApple, 
       logout: handleLogout,

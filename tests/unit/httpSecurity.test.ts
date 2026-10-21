@@ -120,3 +120,25 @@ test("regression guards: dangerous patterns removed from server and client code"
   }
   assert.doesNotMatch(read("src/firebase.ts"), /email: auth\.currentUser\?\.email|photoUrl: provider/);
 });
+
+test("storage CORS tool: proposes exact HTTPS origins only, never '*'", async () => {
+  const { proposedCors, validateOrigins } = await import("../../scripts/ops/corsPolicy");
+  assert.deepEqual(validateOrigins(["https://studysanctuary.net", "http://localhost:3000"]), []);
+  assert.deepEqual(validateOrigins(["*", "http://evil.example", "https://a.example/path", "nope"]), ["*", "http://evil.example", "https://a.example/path", "nope"]);
+  assert.deepEqual(proposedCors(["https://studysanctuary.net"])[0].origin, ["https://studysanctuary.net"]);
+});
+
+test("2-G: dangerous root diagnostic scripts are gone", () => {
+  for (const file of ["dump-env.ts", "check-env.ts", "check-storage.ts", "find-bucket.ts", "fix-cors-script.ts", "check-bucket.ts", "check-buckets.ts", "test-buckets.ts"]) {
+    assert.equal(fs.existsSync(path.join(repoRoot, file)), false, file);
+  }
+});
+
+test("2-C: client never stores the Google token in localStorage and uses authenticated fetch", () => {
+  const authContext = read("src/contexts/AuthContext.tsx");
+  assert.doesNotMatch(authContext, /localStorage\.setItem\('google_drive_token'/);
+  for (const file of ["src/components/DrivePickerModal.tsx", "src/components/CalendarView.tsx"]) {
+    assert.doesNotMatch(read(file), /\bfetch\((['`])\/api\/(drive|calendar|auth)/, file);
+  }
+  assert.doesNotMatch(read("src/components/DrivePickerModal.tsx"), /window\.open\(`\/api\/drive/);
+});

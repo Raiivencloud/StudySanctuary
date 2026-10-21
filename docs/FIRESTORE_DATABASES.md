@@ -13,7 +13,7 @@ El proyecto de Firebase tiene (o tuvo) **dos bases de Firestore**:
 |---|---|---|
 | **Cliente (toda la app)**: `src/firebase.ts` → `getFirestore(app, firestoreDatabaseId)` | **Con nombre** | Lee y escribe todas las colecciones: `users`, `user_courses` (+`content`), `tasks`, `activities`, `exams`, `chats` (+`messages`), `userFiles`, `bookProgress`, `groups` (+`members`, `notes`, `plans`), `feedback`, `stats`, `publicLibrary`, `arena_*` |
 | **Servidor**: `server.ts` → `admin.firestore()` | **`(default)`** | **Webhook de Mercado Pago:** `set(merge)` en `users/{uid}` (`remainingCredits`, `subscriptionType`, `subscription.*`). **Panel de admin:** lee todos los `users` y `stats/global`. **Interruptor de IA:** escribe `stats/global.isAiSuspendedForFree`. |
-| **Reglas e índices**: `firebase.json` → `"firestore": { "rules": "firestore.rules" }` | **Solo `(default)`** | `firebase deploy` publica `firestore.rules` **únicamente en `(default)`**. Las reglas de la base con nombre se gestionan por separado (posiblemente desde AI Studio o la consola). |
+| **Reglas e índices**: `firebase.json` → `"firestore": { "rules": "firestore.rules" }` (cómo desplegar en la base correcta: [`FIRESTORE_RULES_DEPLOYMENT.md`](./FIRESTORE_RULES_DEPLOYMENT.md)) | **Solo `(default)`** | `firebase deploy` publica `firestore.rules` **únicamente en `(default)`**. Las reglas de la base con nombre se gestionan por separado (posiblemente desde AI Studio o la consola). |
 | **Firebase Auth** (cuentas de usuario) | No depende de la base | Las cuentas son del **proyecto**: no se ven afectadas por la base que se elija. |
 | **Storage** (archivos) | No depende de la base | Bucket compartido. |
 
@@ -34,12 +34,7 @@ Cambiar la base del servidor (`FIREBASE_DATABASE_ID`) altera el flujo de pagos y
 
 1. **Listar las bases:** consola de Firebase > Firestore (selector de base), o `gcloud firestore databases list --project <id>`.
 2. **Comparar las reglas:** consola > Firestore > *Reglas*, con cada base seleccionada, contra `firestore.rules`.
-3. **Contar documentos** sin ver su contenido:
-   ```bash
-   gcloud auth application-default login
-   npx tsx scripts/ops/compare-firestore-databases.ts --project <project-id> --named-db <id-de-la-base>
-   ```
-   Solo ejecuta `count()` y comprueba que `stats/global` exista. Costo aproximado: 1 lectura cada 1.000 documentos contados.
+3. **Contar documentos** sin ver su contenido: guía paso a paso en [`ops/FIRESTORE_COMPARISON.md`](./ops/FIRESTORE_COMPARISON.md). El script es de solo lectura, y eso está verificado con pruebas en el emulador.
 4. **Logs de Cloud Run** (Logs Explorer): buscar `[Webhook] Subscription and credits updated` frente a `Webhook Error processing payment`. Así se sabe si el webhook llegó a escribir en `(default)`.
 5. **Mercado Pago:** cruzar los pagos aprobados con los usuarios que tienen `subscription.lastPaymentId` en cada base.
 
