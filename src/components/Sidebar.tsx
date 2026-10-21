@@ -81,7 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isO
     { id: 'math', label: 'Matemáticas', icon: Calculator, color: 'text-amber-400' },
     { id: 'multimedia', label: 'Explorador', icon: Sparkles, color: 'text-cyan-400' },
     { id: 'study-groups', label: 'Grupos de Estudio', icon: Users, color: 'text-blue-400' },
-    { id: 'subscription', label: 'Suscripción', icon: CreditCard, color: 'text-emerald-400' },
+    { id: 'subscription', label: 'Planes', icon: CreditCard, color: 'text-emerald-400' },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare, color: 'text-pink-400' },
     { id: 'help-center', label: 'Ayuda', icon: HelpCircle, color: 'text-blue-400' },
     { id: 'settings', label: 'Configuración', icon: Settings, color: 'text-zinc-400' },
@@ -191,7 +191,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isO
                 <p className="text-sm font-bold text-white truncate">
                   {userProfile?.displayName || user?.displayName || 'Raiiven Games'}
                 </p>
-                <p className="text-[10px] text-white/40 truncate">{user?.email || 'agusgestro17@gmail.com'}</p>
+                <p className="text-[10px] text-white/40 truncate">{user?.email || ''}</p>
               </div>
             )}
           </div>

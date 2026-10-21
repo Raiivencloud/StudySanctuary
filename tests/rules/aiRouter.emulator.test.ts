@@ -5,7 +5,7 @@
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import admin from "firebase-admin";
+import { initializeApp, deleteApp, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { createAiRouter } from "../../server/ai/aiRouter";
 import { createCreditService, utcDay } from "../../server/credits/creditService";
@@ -15,7 +15,7 @@ import { withApp, fakeVerifyIdToken } from "../helpers/http";
 import { assertEmulatorOnly } from "./env";
 
 const PROJECT = "demo-studysanctuary-ai";
-let app: admin.app.App;
+let app: App;
 let db: Firestore;
 let modelCalls = 0;
 
@@ -59,12 +59,12 @@ const balance = async () => (await db.collection("users").doc("user-1").get()).d
 
 before(() => {
   assertEmulatorOnly();
-  app = admin.initializeApp({ projectId: PROJECT }, "ai-router-emulator-test");
+  app = initializeApp({ projectId: PROJECT }, "ai-router-emulator-test");
   db = getFirestore(app);
 });
 
 after(async () => {
-  await app?.delete();
+  if (app) await deleteApp(app);
 });
 
 beforeEach(async () => {

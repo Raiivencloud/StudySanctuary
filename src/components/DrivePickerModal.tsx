@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, FileText, Download, Loader2, ExternalLink, Upload, Plus, BrainCircuit } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { authFetch, downloadWithAuth } from '../lib/authFetch';
@@ -21,7 +20,6 @@ interface DrivePickerModalProps {
 }
 
 export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onClose, onFileSelect }) => {
-  const { googleAccessToken } = useAuth();
   const [activeTab, setActiveTab] = useState<'drive' | 'local'>('drive');
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,15 +32,7 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
     if (activeTab !== 'drive') return;
     setIsLoading(true);
     try {
-      // First try to sync token if we have it in context but not in session
-      if (googleAccessToken) {
-        await authFetch('/api/auth/google/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accessToken: googleAccessToken })
-        });
-      }
-
+      // Drive uses the token of the "Conectar" flow (the sign-in token has no Drive access)
       const response = await authFetch('/api/drive/files');
       if (response.ok) {
         const data = await response.json();
@@ -78,6 +68,9 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
       if (response.ok) {
         toast.success('Éxito', { description: 'Archivo subido correctamente a Google Drive' });
         fetchFiles();
+      } else if (response.status === 401) {
+        setIsConnected(false);
+        toast.error('Google Drive', { description: 'Volvé a conectar Google Drive para permitir la subida.' });
       } else {
         throw new Error('Upload failed');
       }
@@ -158,8 +151,19 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
     setIsLoading(true);
     try {
       const response = await authFetch(`/api/drive/download/${file.id}`);
+      if (response.status === 401) {
+        setIsConnected(false);
+        toast.error('Google Drive', { description: 'Tu conexión con Google Drive venció. Volvé a conectarla.' });
+        return;
+      }
+      if (response.status === 415) {
+        toast.error('Google Drive', { description: 'Este tipo de archivo de Google no se puede importar (solo Documentos, Hojas de cálculo, Presentaciones y Dibujos).' });
+        return;
+      }
       if (!response.ok) throw new Error('Download failed');
-      
+
+      // Google Docs arrive exported (PDF/XLSX): use the real type of the bytes
+      const realMimeType = response.headers.get('Content-Type')?.split(';')[0] || file.mimeType;
       const blob = await response.blob();
       const reader = new FileReader();
       
@@ -169,7 +173,7 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
           onFileSelect({
             name: file.name,
             data: base64,
-            mimeType: file.mimeType
+            mimeType: realMimeType
           });
         }
         onClose();

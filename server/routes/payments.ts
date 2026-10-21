@@ -24,7 +24,7 @@ export interface PaymentsRouterOptions {
   fakeGateway?: FakeGateway;
   appUrl: string;
   /** Profile summary for the return page. */
-  readProfile?: (uid: string) => Promise<{ credits: number; planName: string; planId?: string; status?: string } | null>;
+  readProfile?: (uid: string) => Promise<{ credits: number; planName: string; planId?: string; status?: string; endsAt?: string } | null>;
   log?: (message: string) => void;
 }
 

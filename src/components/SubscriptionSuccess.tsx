@@ -4,6 +4,7 @@ import { CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { authFetch } from '../lib/authFetch';
 import { refreshCredits } from '../services/userService';
+import { COMMUNITY_URL } from '../config/brand';
 
 type PaymentState = 'checking' | 'approved' | 'pending' | 'failed';
 
@@ -11,7 +12,7 @@ interface SyncResponse {
   outcome: string;
   status: string | null;
   planId: string | null;
-  profile: { credits: number; planName: string; planId?: string } | null;
+  profile: { credits: number; planName: string; planId?: string; endsAt?: string } | null;
 }
 
 const PENDING = new Set(['pending', 'in_process', 'authorized']);
@@ -25,7 +26,7 @@ export const SubscriptionSuccess: React.FC = () => {
   const { user, userProfile } = useAuth();
   const displayName = userProfile?.displayName || 'estudiante';
   const [state, setState] = React.useState<PaymentState>('checking');
-  const [plan, setPlan] = React.useState<{ planName: string; credits: number; planId?: string }>({ planName: 'Plan', credits: 0 });
+  const [plan, setPlan] = React.useState<{ planName: string; credits: number; planId?: string; endsAt?: string }>({ planName: 'Plan', credits: 0 });
 
   React.useEffect(() => {
     if (!user) return;
@@ -48,7 +49,7 @@ export const SubscriptionSuccess: React.FC = () => {
         if (cancelled) return;
         const data: SyncResponse | null = response.ok ? await response.json() : null;
         if (data && (data.outcome === 'applied' || data.outcome === 'already_applied')) {
-          if (data.profile) setPlan({ planName: data.profile.planName, credits: data.profile.credits, planId: data.planId || data.profile.planId });
+          if (data.profile) setPlan({ planName: data.profile.planName, credits: data.profile.credits, planId: data.planId || data.profile.planId, endsAt: data.profile.endsAt });
           setState('approved');
           refreshCredits(user.uid);
           return;
@@ -74,7 +75,7 @@ export const SubscriptionSuccess: React.FC = () => {
 
   const copy = {
     checking: { title: 'Confirmando tu pago...', text: 'Estamos verificando el pago con Mercado Pago.', badge: '' },
-    approved: { title: `¡Bienvenido a la élite, ${displayName}!`, text: 'Tu suscripción está activa. Disfruta de tus créditos ilimitados y tu Insignia de Honor.', badge: `${plan.planName} - ${plan.credits} Créditos Activos` },
+    approved: { title: `¡Bienvenido a la élite, ${displayName}!`, text: `${plan.endsAt ? `Tu plan está activo hasta el ${new Date(plan.endsAt).toLocaleDateString('es-AR')}` : 'Tu plan está activo'} (pago único, sin renovación automática). Disfrutá de tus créditos y tu Insignia de Honor.`, badge: `${plan.planName} - ${plan.credits} Créditos Activos` },
     pending: { title: 'Tu pago está en proceso', text: 'Mercado Pago todavía no lo acreditó. Tu plan se activará automáticamente apenas se confirme; no hace falta volver a pagar.', badge: 'Pago pendiente de acreditación' },
     failed: { title: 'No pudimos confirmar el pago', text: 'El pago no fue aprobado o no corresponde a tu cuenta. Si se te cobró, escribinos desde Ayuda y lo revisamos.', badge: '' },
   }[state];
@@ -115,7 +116,7 @@ export const SubscriptionSuccess: React.FC = () => {
         
         {state === 'approved' && planId === 'anual' && (
           <a 
-            href="https://discord.gg/Y5yFKEYD9r"
+            href={COMMUNITY_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full py-4 bg-[#5865F2] text-white rounded-xl font-bold hover:scale-105 transition-all mb-4 flex items-center justify-center gap-2 shadow-lg shadow-[#5865F2]/20"

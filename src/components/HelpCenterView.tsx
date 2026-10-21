@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { HelpCircle, ChevronRight, MessageCircle, Mail, Phone, Send, X, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
+import { COMMUNITY_URL } from '../config/brand';
 
 export const HelpCenterView: React.FC = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -83,7 +84,7 @@ export const HelpCenterView: React.FC = () => {
           <p className="text-xs text-on-surface-variant">soportestudysanctuary@outlook.com</p>
         </div>
         <a 
-          href="https://discord.gg/Y5yFKEYD9r"
+          href={COMMUNITY_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="p-6 bg-[#5865F2]/5 rounded-2xl border border-[#5865F2]/10 text-center space-y-3 hover:bg-[#5865F2]/10 transition-all group"

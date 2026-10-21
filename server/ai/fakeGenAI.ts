@@ -6,6 +6,7 @@
  * Put "[[fake-error]]" in a prompt to simulate an upstream failure (tests the refund path).
  */
 import type { GenAIClient } from "./generation";
+import { demoText, demoLocation } from "./demoContent";
 
 // 0.2 s of silence, 16-bit PCM mono 24 kHz (the format Gemini TTS returns).
 const SILENT_PCM_BASE64 = Buffer.alloc(9600).toString("base64");
@@ -67,8 +68,8 @@ export function createFakeGenAI(): GenAIClient {
         }
 
         const text = config.responseMimeType === "application/json"
-          ? JSON.stringify(config.responseSchema ? fromSchema(config.responseSchema) : jsonFor(prompt))
-          : `### Respuesta de prueba (modo desarrollo)\n\nEsta respuesta fue generada sin llamar a Gemini (AI_PROVIDER=fake).\n\n**Consulta:** ${prompt.slice(0, 200)}`;
+          ? JSON.stringify(config.responseSchema ? (demoLocation(config.responseSchema, prompt) ?? fromSchema(config.responseSchema)) : jsonFor(prompt))
+          : demoText(prompt);
 
         return {
           text,

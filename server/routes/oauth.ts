@@ -10,7 +10,7 @@ import { createOAuthState, consumeOAuthState, type OAuthProvider } from "../secu
 import { requireSameOrigin, logError } from "../security/http";
 import { createRateLimiter, ipKey } from "../security/rateLimit";
 import { requireUser, getUser, getBearerToken, type AuthOptions } from "../security/auth";
-import type { IntegrationTokenStore } from "../integrations/tokenStore";
+import type { IntegrationTokenStore, StoredTokens } from "../integrations/tokenStore";
 
 export interface OAuthClientConfig {
   clientId?: string;
@@ -28,12 +28,35 @@ export interface OAuthRouterOptions {
   /** Session cookie options, needed to clear the cookie on logout. */
   sessionCookie: { name: string; secure: boolean; sameSite: "none" | "lax" | "strict" };
   exchangeCode?: ExchangeCode;
+  /** "all": read the whole Drive (restricted scope, needs Google's security assessment); "app": only files used through the app. */
+  googleDriveAccess?: GoogleDriveAccess;
+}
+
+export type GoogleDriveAccess = "all" | "app";
+
+/** Google scopes: drive.file is needed to upload; drive.readonly (restricted) lists the whole Drive. */
+export function googleScopes(access: GoogleDriveAccess = "all"): string {
+  return [
+    "https://www.googleapis.com/auth/calendar.readonly",
+    ...(access === "all" ? ["https://www.googleapis.com/auth/drive.readonly"] : []),
+    "https://www.googleapis.com/auth/drive.file",
+  ].join(" ");
+}
+
+/** Tokens from the authorization-code flow: absolute expiry and their origin (never replaced by a sign-in token). */
+export function normalizeOAuthTokens(raw: any, now = Date.now()): StoredTokens {
+  const expiresIn = Number(raw?.expires_in);
+  return {
+    ...raw,
+    ...(Number.isFinite(expiresIn) && expiresIn > 0 ? { expiry_date: now + expiresIn * 1000 } : {}),
+    source: "oauth",
+  };
 }
 
 const PROVIDERS: Record<OAuthProvider, { authorizeUrl: string; scope: string; extraParams: Record<string, string> }> = {
   google: {
     authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-    scope: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.readonly",
+    scope: googleScopes("all"),
     extraParams: { access_type: "offline", prompt: "consent" },
   },
   outlook: {
@@ -87,7 +110,7 @@ export function createOAuthRouter(options: OAuthRouterOptions): Router {
       client_id: clientFor(provider).clientId || "",
       redirect_uri: redirectUriFor(provider),
       response_type: "code",
-      scope: config.scope,
+      scope: provider === "google" ? googleScopes(options.googleDriveAccess) : config.scope,
       state,
       ...config.extraParams,
     });
@@ -126,7 +149,7 @@ export function createOAuthRouter(options: OAuthRouterOptions): Router {
 
     try {
       const tokens = await exchangeCode(provider, code, redirectUriFor(provider));
-      await options.tokens.set(uid, provider, tokens);
+      await options.tokens.set(uid, provider, normalizeOAuthTokens(tokens));
       console.log(`[OAuth] ${provider} tokens received and stored for uid=${uid}`);
       res.send(successPage(provider));
     } catch (error) {
@@ -143,9 +166,15 @@ export function createOAuthRouter(options: OAuthRouterOptions): Router {
     const { accessToken } = req.body || {};
     if (!accessToken || typeof accessToken !== "string") return res.status(400).json({ error: "No access token provided" });
 
-    await options.tokens.set(getUser(res).uid, "google", {
+    // The sign-in token has no Drive/Calendar scopes: it must never replace a connected account's token
+    const { uid } = getUser(res);
+    const current = await options.tokens.get(uid, "google");
+    if (current?.source === "oauth") return res.json({ status: "kept" });
+
+    await options.tokens.set(uid, "google", {
       access_token: accessToken,
-      expiry_date: Date.now() + 3600 * 1000 // Assume 1 hour for Firebase tokens
+      expiry_date: Date.now() + 3600 * 1000, // Assume 1 hour for Firebase tokens
+      source: "sign-in",
     });
 
     res.json({ status: "ok" });

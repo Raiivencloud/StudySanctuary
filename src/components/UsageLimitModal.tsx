@@ -30,7 +30,7 @@ export const UsageLimitModal: React.FC<UsageLimitModalProps> = ({ isOpen, onClos
             <h2 className="text-2xl font-bold text-on-surface mb-4">¡Tu potencial no tiene límites, pero tus créditos sí! ✨</h2>
             <p className="text-on-surface-variant mb-8">Has alcanzado el límite de consultas gratuitas. Para seguir generando podcasts personalizados, ejercicios inteligentes y resúmenes, elige uno de nuestros planes premium.</p>
             <button className="w-full py-4 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-all mb-4">
-              Ver Planes de Suscripción
+              Ver Planes
             </button>
             <button onClick={onClose} className="text-sm text-on-surface-variant hover:text-emerald-500 underline">
               Volver al Dashboard

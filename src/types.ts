@@ -165,9 +165,11 @@ export interface UserProfile {
     wallpaperType?: 'image';
   };
   subscription?: {
-    status: 'trial' | 'active' | 'expired' | 'cancelled';
-    type: 'free' | 'monthly' | 'quarterly' | 'annual';
-    planName?: string; // Add this
+    // Written by the server (payments): 'revoked' after a refund or chargeback
+    status: 'trial' | 'active' | 'expired' | 'cancelled' | 'revoked';
+    // Plan ids of SUBSCRIPTION_PLANS / server/payments/plans.ts
+    type: 'free' | 'mensual' | 'trimestral' | 'anual';
+    planName?: string;
     trialStartDate: any;
     subscriptionEndDate: any;
   };

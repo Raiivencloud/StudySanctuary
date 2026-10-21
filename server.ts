@@ -12,7 +12,9 @@ import session from "express-session";
 import cookieParser from "cookie-parser";
 import compression from "compression";
 import "dotenv/config";
-import admin from "firebase-admin";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getStorage } from "firebase-admin/storage";
 import { getFirestore } from "firebase-admin/firestore";
 import { loadServerConfig, ConfigError, type ServerConfig } from "./server/config";
 import { GoogleGenAI } from "@google/genai";
@@ -50,10 +52,10 @@ if (serverConfig.session.ephemeral) {
 }
 
 // Initialize Firebase Admin
-if (!admin.apps.length) {
+if (!getApps().length) {
   try {
     // Try initializing with config first
-    admin.initializeApp({
+    initializeApp({
       projectId: serverConfig.firebase.projectId,
       storageBucket: serverConfig.firebase.storageBucket
     });
@@ -61,7 +63,7 @@ if (!admin.apps.length) {
   } catch (initError) {
     console.warn("[Server] Failed to initialize Firebase Admin with config, trying default:", initError);
     try {
-      admin.initializeApp();
+      initializeApp();
       console.log("[Server] Firebase Admin initialized with default credentials");
     } catch (defaultInitError) {
       console.error("[Server] Failed to initialize Firebase Admin with default credentials:", defaultInitError);
@@ -71,9 +73,9 @@ if (!admin.apps.length) {
 }
 // Without FIREBASE_DATABASE_ID the Admin SDK keeps using the "(default)" database (previous behavior).
 const dbAdmin = serverConfig.firebase.databaseId
-  ? getFirestore(admin.app(), serverConfig.firebase.databaseId)
-  : admin.firestore();
-const storageAdmin = admin.storage();
+  ? getFirestore(serverConfig.firebase.databaseId)
+  : getFirestore();
+const storageAdmin = getStorage();
 
 declare module 'express-session' {
   interface SessionData {
@@ -85,7 +87,7 @@ declare module 'express-session' {
 async function startServer() {
   const app = express();
   const PORT = 3000;
-  const verifyIdToken = (token: string) => admin.auth().verifyIdToken(token);
+  const verifyIdToken = (token: string) => getAuth().verifyIdToken(token);
   const authOptions = { verifyIdToken, adminEmails: serverConfig.admin.emails };
   const SESSION_COOKIE_NAME = "connect.sid";
   const integrationTokens = new InMemoryTokenStore(serverConfig.session.maxAgeMs);
@@ -275,6 +277,7 @@ async function startServer() {
     appUrl: APP_URL,
     google: { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET },
     outlook: { clientId: process.env.OUTLOOK_CLIENT_ID, clientSecret: process.env.OUTLOOK_CLIENT_SECRET },
+    googleDriveAccess: serverConfig.integrations.googleDriveAccess,
     sessionCookie: {
       name: SESSION_COOKIE_NAME,
       secure: serverConfig.session.cookieSecure,
@@ -288,6 +291,7 @@ async function startServer() {
     tokens: integrationTokens,
     appUrl: APP_URL,
     maxUploadBytes: serverConfig.uploads.maxBytes,
+    google: { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET },
   }));
 
   // Mercado Pago return URL: keep the parameters Mercado Pago appends (payment_id, status...).
@@ -319,6 +323,7 @@ async function startServer() {
         planName: data.subscriptionType || "Gratis",
         planId: data.subscription?.type,
         status: data.subscription?.status,
+        endsAt: typeof data.subscription?.subscriptionEndDate?.toDate === "function" ? data.subscription.subscriptionEndDate.toDate().toISOString() : undefined,
       };
     },
   }));

@@ -6,8 +6,10 @@
  *
  *   npm run dev:emulators                 # transitional rules (current firestore.rules)
  *   npm run dev:emulators -- --final-rules  # final rules: the client cannot write credits
+ *   npm run demo                          # final rules + demo data + "demo" banner (docs/DEMO.md)
  *
  * Open http://localhost:3000 and sign in with any test account from the Auth emulator page.
+ * Nothing here can reach real Firebase, Gemini or Mercado Pago (demo-* project, fake providers).
  */
 import fs from "fs";
 import os from "os";
@@ -17,7 +19,8 @@ import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const finalRules = process.argv.includes("--final-rules");
+const demo = process.argv.includes("--demo");
+const finalRules = demo || process.argv.includes("--final-rules");
 
 let config = path.join(repoRoot, "firebase.test.json");
 if (finalRules) {
@@ -53,13 +56,16 @@ const env = {
   VITE_FIREBASE_STORAGE_BUCKET: "demo-studysanctuary.appspot.com",
   VITE_FIREBASE_APP_ID: "1:000000000000:web:demo",
   VITE_FIREBASE_FIRESTORE_DATABASE_ID: "",
+  VITE_DEMO_MODE: demo ? "true" : "",
 };
 
 const firebaseBin = path.join(repoRoot, "node_modules", ".bin", "firebase");
 const tsxBin = path.join(repoRoot, "node_modules", ".bin", "tsx");
 const child = spawn(firebaseBin, [
   "emulators:exec", "--config", config, "--project", "demo-studysanctuary", "--only", "auth,firestore,storage",
-  `${tsxBin} ${path.join(repoRoot, "server.ts")}`,
+  demo
+    ? `${tsxBin} ${path.join(repoRoot, "scripts", "demo", "seed.ts")} && ${tsxBin} ${path.join(repoRoot, "server.ts")}`
+    : `${tsxBin} ${path.join(repoRoot, "server.ts")}`,
 ], { cwd: repoRoot, env, stdio: "inherit" });
 
 child.on("exit", (code) => process.exit(code ?? 0));

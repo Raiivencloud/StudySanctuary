@@ -6,7 +6,7 @@
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import admin from "firebase-admin";
+import { initializeApp, deleteApp, type App } from "firebase-admin/app";
 import { getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
 import { assertFails, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
@@ -21,7 +21,7 @@ import { assertEmulatorOnly, createTestEnv } from "./env";
 const PROJECT = "demo-studysanctuary-payments";
 const SECRET = "emulator-webhook-secret";
 const DAY = 24 * 60 * 60 * 1000;
-let app: admin.app.App;
+let app: App;
 let db: Firestore;
 let gateway: FakeGateway;
 let payments: PaymentService;
@@ -44,12 +44,12 @@ async function checkoutAndPay(uid: string, planId: string, status: string, overr
 
 before(() => {
   assertEmulatorOnly();
-  app = admin.initializeApp({ projectId: PROJECT }, "payments-test");
+  app = initializeApp({ projectId: PROJECT }, "payments-test");
   db = getFirestore(app);
 });
 
 after(async () => {
-  await app?.delete();
+  if (app) await deleteApp(app);
 });
 
 beforeEach(async () => {

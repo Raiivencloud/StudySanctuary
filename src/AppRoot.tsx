@@ -7,6 +7,7 @@ import { ThemeProvider } from './contexts/ThemeContext.tsx';
 import { AuthProvider } from './contexts/AuthContext.tsx';
 import { MusicProvider } from './contexts/MusicContext.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { DemoBanner } from './components/DemoBanner.tsx';
 
 export default function AppRoot() {
   return (
@@ -19,6 +20,7 @@ export default function AppRoot() {
                 <CourseProvider>
                   <BrowserRouter>
                     <App />
+                    <DemoBanner />
                   </BrowserRouter>
                 </CourseProvider>
               </LanguageProvider>

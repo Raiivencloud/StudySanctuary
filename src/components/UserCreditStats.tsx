@@ -36,7 +36,7 @@ export const UserCreditStats: React.FC = () => {
 
   const motivationalPhrase = data.credits > totalCredits * 0.3 
     ? '¡Tu potencial de estudio está al máximo! 🔥' 
-    : '¡Te estás convirtiendo en un experto! Considerá renovar pronto. ✨';
+    : '¡Te estás convirtiendo en un experto! Cuando los necesites, podés comprar otro plan. ✨';
 
   return (
     <motion.div 

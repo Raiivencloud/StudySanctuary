@@ -20,6 +20,8 @@ import confetti from 'canvas-confetti';
 import { UsageLimitModal } from './UsageLimitModal';
 import { auth } from '../firebase';
 
+const MAX_SPREADSHEET_BYTES = 5 * 1024 * 1024;
+
 export const AIStudyView: React.FC<{ 
   onDriveClick?: () => void, 
   driveFile?: { name: string, data?: string, text?: string, mimeType: string } | null,
@@ -812,6 +814,13 @@ export const AIStudyView: React.FC<{
   const handleSpreadsheetUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // xlsx (SheetJS 0.18.5) has known parsing issues with crafted files and no fixed npm release:
+    // keep inputs small (docs/DEPENDENCIES.md)
+    if (file.size > MAX_SPREADSHEET_BYTES) {
+      toast.error('La planilla es demasiado grande (máximo 5 MB).');
+      e.target.value = '';
+      return;
+    }
 
     setSpreadsheetName(file.name);
     const reader = new FileReader();

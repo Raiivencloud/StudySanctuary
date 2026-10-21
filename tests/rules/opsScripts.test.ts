@@ -8,14 +8,14 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { spawnSync } from "child_process";
-import admin from "firebase-admin";
+import { initializeApp, deleteApp, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { assertEmulatorOnly, PROJECT_ID, repoRoot } from "./env";
 
 const NAMED_DB = "named-db";
 const tsxBin = path.join(repoRoot, "node_modules", ".bin", "tsx");
-let app: admin.app.App;
+let app: App;
 
 function runScript(script: string, args: string[]) {
   return spawnSync(tsxBin, [path.join(repoRoot, "scripts", "ops", script), "--project", PROJECT_ID, ...args], {
@@ -53,7 +53,7 @@ before(async () => {
   assertEmulatorOnly();
   await clearEmulatorDatabase("(default)");
   await clearEmulatorDatabase(NAMED_DB);
-  app = admin.initializeApp({ projectId: PROJECT_ID }, "ops-scripts-test");
+  app = initializeApp({ projectId: PROJECT_ID }, "ops-scripts-test");
   const defaultDb = getFirestore(app);
   const namedDb = getFirestore(app, NAMED_DB);
 
@@ -68,13 +68,13 @@ before(async () => {
 });
 
 after(async () => {
-  await app?.delete();
+  if (app) await deleteApp(app);
 });
 
 test("compare-firestore-databases: source contains no write operations", () => {
   const source = fs.readFileSync(path.join(repoRoot, "scripts/ops/compare-firestore-databases.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
-    .replace("await app.delete();", ""); // closes the Admin SDK app, not a data operation
+    .replace("await closeAdmin(app);", ""); // closes the Admin SDK app, not a data operation
   for (const forbidden of [".set(", ".update(", ".delete(", ".add(", ".create(", "batch(", "runTransaction", "bulkWriter", "recursiveDelete", "writeBatch"]) {
     assert.ok(!source.includes(forbidden), `the script must not call ${forbidden}`);
   }

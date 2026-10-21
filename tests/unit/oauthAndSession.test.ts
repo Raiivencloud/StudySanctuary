@@ -104,7 +104,7 @@ test("valid callback stores tokens for the uid that started the flow; state cann
     assert.doesNotMatch(html, /'\*'/);
     assert.deepEqual(exchanges, [{ provider: "outlook", code: "the-code", redirectUri: "https://app.example.com/auth/outlook/callback" }]);
 
-    assert.deepEqual(await tokens.get("user-1", "outlook"), { access_token: "access-outlook-the-code" });
+    assert.deepEqual(await tokens.get("user-1", "outlook"), { access_token: "access-outlook-the-code", source: "oauth" });
     assert.equal(await tokens.get("user-2", "outlook"), null, "other users never receive these tokens");
 
     const replay = await fetch(`${base}/auth/outlook/callback?code=the-code&state=${state}`, { headers: { cookie } });

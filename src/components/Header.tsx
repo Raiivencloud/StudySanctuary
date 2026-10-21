@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, Bell, HelpCircle, Sun, Moon, LogOut, User as UserIcon, Settings, CreditCard, CheckCircle2, Clock, Menu } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -7,6 +7,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { View } from '../types';
 import { cn } from '../lib/utils';
 import { UserBadge } from './UserBadge';
+import { isFounder } from '../config/admin';
+import { useCourses } from '../contexts/CourseContext';
+import { buildNotifications } from '../lib/studyStats';
+
+const NOTIFICATION_STYLE = {
+  exam: { icon: Clock, color: 'text-amber-400' },
+  plan: { icon: CreditCard, color: 'text-indigo-400' },
+  activity: { icon: CheckCircle2, color: 'text-emerald-400' },
+} as const;
 
 interface HeaderProps {
   onViewChange?: (view: View) => void;
@@ -60,19 +69,29 @@ export const Header: React.FC<HeaderProps> = ({ onViewChange, onToggleSidebar, o
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Nuevo material disponible', message: 'Se ha generado un nuevo resumen de Anatomía.', time: 'Hace 5 min', icon: CheckCircle2, color: 'text-emerald-400', read: false },
-    { id: 2, title: 'Examen próximo', message: 'Recuerda tu examen de Bioquímica mañana.', time: 'Hace 2h', icon: Clock, color: 'text-amber-400', read: false },
-    { id: 3, title: 'Suscripción', message: 'Tu periodo de prueba termina en 2 días.', time: 'Hace 5h', icon: CreditCard, color: 'text-indigo-400', read: false },
-  ]);
+  // Notifications from the user's real data (upcoming exams, plan or trial ending, latest AI activity)
+  const { exams, activities } = useCourses();
+  const readKey = `read_notifications_${user?.uid || 'anon'}`;
+  const [readIds, setReadIds] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(readKey) || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const notifications = useMemo(() => buildNotifications({ exams, activities, subscription: userProfile?.subscription })
+    .map(n => ({ ...n, icon: NOTIFICATION_STYLE[n.kind].icon, color: NOTIFICATION_STYLE[n.kind].color, read: readIds.includes(n.id) })),
+    [exams, activities, userProfile?.subscription, readIds]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const markAsRead = (id?: number) => {
-    if (id) {
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    } else {
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  const markAsRead = (id?: string) => {
+    const next = Array.from(new Set([...readIds, ...(id ? [id] : notifications.map(n => n.id))])).slice(-100);
+    setReadIds(next);
+    try {
+      localStorage.setItem(readKey, JSON.stringify(next));
+    } catch {
+      // Storage unavailable: read marks last for this session only
     }
   };
 
@@ -259,14 +278,15 @@ export const Header: React.FC<HeaderProps> = ({ onViewChange, onToggleSidebar, o
             <div className="text-right hidden lg:block bg-white/5 px-4 py-2 rounded-full">
               <div className="flex items-center justify-end gap-2">
                 <p className="text-xs font-black text-on-surface truncate max-w-[140px] group-hover:text-primary transition-colors">
-                  {userProfile?.displayName || user?.displayName || 'Andrés Vignalo'}
+                  {userProfile?.displayName || user?.displayName || 'Estudiante'}
                 </p>
-                {user?.email === 'Agusgestro17@gmail.com' && <UserBadge type="founder" />}
-                {userProfile?.subscription?.planName === 'Trimestral' && <UserBadge type="silver" />}
-                {userProfile?.subscription?.planName === 'Anual' && <UserBadge type="gold" />}
+                {isFounder(user?.email) && <UserBadge type="founder" />}
+                {/* Plan badges promised on the pricing page (stored plan type, only while the plan is active) */}
+                {userProfile?.subscription?.status === 'active' && userProfile.subscription.type === 'trimestral' && <UserBadge type="silver" />}
+                {userProfile?.subscription?.status === 'active' && userProfile.subscription.type === 'anual' && <UserBadge type="gold" />}
               </div>
               <p className="text-[10px] text-on-surface-variant font-bold truncate">
-                {user?.email || 'vignaloandres05@gmail.com'}
+                {user?.email || ''}
               </p>
             </div>
             <div className="relative">

@@ -10,7 +10,7 @@
  *        policy is restricted to the given origins (never "*"), unlike the old fix-cors script.
  */
 import { getStorage } from "firebase-admin/storage";
-import { getArg, getArgs, hasFlag, requireArg, initAdmin, describeTarget, fail } from "./lib";
+import { getArg, getArgs, hasFlag, requireArg, initAdmin, describeTarget, fail, closeAdmin } from "./lib";
 import { proposedCors, validateOrigins } from "./corsPolicy";
 
 const USAGE = "npx tsx scripts/ops/storage-buckets.ts --project <id> <check [--bucket <name>] | cors --bucket <name> --origin <url> [--apply]>";
@@ -41,7 +41,7 @@ async function main() {
       console.log(`${name}: existe (ubicación ${metadata.location}, clase ${metadata.storageClass})`);
       console.log(`  CORS actual: ${JSON.stringify(metadata.cors || [])}`);
     }
-    await app.delete();
+    await closeAdmin(app);
     return;
   }
 
@@ -68,7 +68,7 @@ async function main() {
     await bucket.setCorsConfiguration(proposedCors(origins));
     console.log("CORS actualizado.");
   }
-  await app.delete();
+  await closeAdmin(app);
 }
 
 main().catch((error) => fail("storage-buckets", error));

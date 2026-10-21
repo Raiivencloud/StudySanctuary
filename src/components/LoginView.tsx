@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { GraduationCap, Users, BrainCircuit, Calendar as CalendarIcon } from 'lucide-react';
+import { COMMUNITY_URL } from '../config/brand';
 
 export const LoginView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +83,7 @@ export const LoginView: React.FC = () => {
             </p>
             <div className="flex justify-center">
               <a 
-                href="https://discord.gg/Y5yFKEYD9r" 
+                href={COMMUNITY_URL} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-[#5865F2] hover:opacity-80 transition-all font-bold text-xs"

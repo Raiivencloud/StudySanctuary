@@ -13,6 +13,10 @@ export default defineConfig(({mode}) => {
       '[security] Eliminala de tu .env: cualquier variable VITE_* queda pública.\n'
     );
   }
+  // The local demo and the emulators must never reach a production build
+  if (mode === 'production' && (env.VITE_DEMO_MODE === 'true' || env.VITE_USE_FIREBASE_EMULATORS === 'true')) {
+    throw new Error('[security] VITE_DEMO_MODE / VITE_USE_FIREBASE_EMULATORS no pueden estar activas en un build de producción.');
+  }
   return {
     plugins: [react(), tailwindcss()],
     base: '',

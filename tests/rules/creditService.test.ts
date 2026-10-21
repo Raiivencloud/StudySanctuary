@@ -4,13 +4,13 @@
  */
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import admin from "firebase-admin";
+import { initializeApp, deleteApp, type App } from "firebase-admin/app";
 import { getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
 import { createCreditService, CreditError, utcDay } from "../../server/credits/creditService";
 import { assertEmulatorOnly } from "./env";
 
 const PROJECT = "demo-studysanctuary-credits";
-let app: admin.app.App;
+let app: App;
 let db: Firestore;
 
 const user = (uid: string) => db.collection("users").doc(uid);
@@ -21,12 +21,12 @@ const codeOf = (error: unknown) => (error instanceof CreditError ? error.code : 
 
 before(() => {
   assertEmulatorOnly();
-  app = admin.initializeApp({ projectId: PROJECT }, "credit-service-test");
+  app = initializeApp({ projectId: PROJECT }, "credit-service-test");
   db = getFirestore(app);
 });
 
 after(async () => {
-  await app?.delete();
+  if (app) await deleteApp(app);
 });
 
 beforeEach(async () => {

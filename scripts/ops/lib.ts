@@ -9,7 +9,7 @@
  * - FIRESTORE_EMULATOR_HOST / FIREBASE_AUTH_EMULATOR_HOST / FIREBASE_STORAGE_EMULATOR_HOST
  *   redirect the Admin SDK to the local emulators (used by the automated tests).
  */
-import admin from "firebase-admin";
+import { initializeApp, deleteApp, type App } from "firebase-admin/app";
 
 export function getArg(name: string, argv = process.argv): string | undefined {
   const index = argv.indexOf(name);
@@ -40,8 +40,8 @@ export function describeTarget(projectId: string): string {
   return emulators.length ? `${projectId} (EMULADOR: ${emulators.join(", ")})` : `${projectId} (PRODUCCIÓN / proyecto real)`;
 }
 
-export function initAdmin(projectId: string, storageBucket?: string): admin.app.App {
-  return admin.initializeApp({ projectId, ...(storageBucket ? { storageBucket } : {}) }, `ops-${Date.now()}`);
+export function initAdmin(projectId: string, storageBucket?: string): App {
+  return initializeApp({ projectId, ...(storageBucket ? { storageBucket } : {}) }, `ops-${Date.now()}`);
 }
 
 export function fail(context: string, error: unknown): never {
@@ -49,3 +49,6 @@ export function fail(context: string, error: unknown): never {
   console.error(`[${context}] ${e?.code ? `${e.code}: ` : ""}${String(e?.message || error).split("\n")[0]}`);
   process.exit(1);
 }
+
+/** Closes the Admin SDK app (not a data operation). */
+export const closeAdmin = (app: App) => deleteApp(app);

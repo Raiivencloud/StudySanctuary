@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
+import { COMMUNITY_URL } from '../config/brand';
 
 interface LandingViewProps {
   onLogin: () => void;
@@ -544,7 +545,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onLogin }) => {
                   <div className="space-y-6">
                     <span className="text-white font-black text-xs uppercase tracking-[0.4em] block border-b border-secondary/20 pb-2">Comunidad</span>
                     <a 
-                      href="https://discord.gg/Y5yFKEYD9r" 
+                      href={COMMUNITY_URL} 
                       target="_blank" 
                       rel="noopener noreferrer" 
                       className="group relative flex items-center gap-3 text-white/40 hover:text-[#5865F2] hover:shadow-[0_0_20px_rgba(88,101,242,0.3)] transition-all font-black uppercase text-[10px] tracking-[0.3em] bg-white/5 py-4 px-8 rounded-2xl border border-white/5"

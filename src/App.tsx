@@ -4,6 +4,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 // Componentes con llaves para evitar errores de importación
 import LandingView from './components/LandingView';
+import { DemoLogin } from './components/DemoBanner';
+import { COMMUNITY_URL, gtmContainerId } from './config/brand';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
@@ -112,7 +114,7 @@ export default function App() {
     );
   }
 
-  if (!user) return <LandingView onLogin={() => {}} />;
+  if (!user) return <><LandingView onLogin={() => {}} /><DemoLogin /></>;
 
   const handleCourseClick = (id: string) => {
     setSelectedCourseId(id);
@@ -136,7 +138,7 @@ export default function App() {
 
       <Toaster position="top-right" theme={theme} richColors closeButton />
       <TrafficAlert />
-      <GoogleTagManager gtmId="GTM-TSHX7NTR" />
+      {gtmContainerId() && <GoogleTagManager gtmId={gtmContainerId()!} />}
       
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
@@ -199,8 +201,9 @@ export default function App() {
                 )}
               >
                 <Suspense fallback={<div className="flex items-center justify-center p-10"><Loader2 className="animate-spin text-primary" /></div>}>
-                  {currentView === 'dashboard' && (
+                  {(currentView === 'dashboard' || currentView === 'courses') && (
                     <Dashboard 
+                      focus={currentView === 'courses' ? 'courses' : undefined}
                       onCourseClick={handleCourseClick} 
                       onAiClick={(tab) => {
                         setStudyTab(tab);
@@ -254,7 +257,7 @@ export default function App() {
               
               <div className="flex items-center gap-6">
                 <a 
-                  href="https://discord.gg/Y5yFKEYD9r" 
+                  href={COMMUNITY_URL} 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 text-[#5865F2] hover:opacity-80 transition-all font-bold text-sm"

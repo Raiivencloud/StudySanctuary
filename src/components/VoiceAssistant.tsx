@@ -23,6 +23,9 @@ import {
   updateDoc
 } from 'firebase/firestore';
 
+// Speech recognition locale for each app language
+const SPEECH_LOCALES: Record<string, string> = { es: 'es-ES', en: 'en-US', pt: 'pt-BR', it: 'it-IT', fr: 'fr-FR' };
+
 interface VoiceAssistantProps {
   isOpen: boolean;
   onClose: () => void;
@@ -141,7 +144,7 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ isOpen, onClose 
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = true;
-      recognition.lang = 'es-ES';
+      recognition.lang = SPEECH_LOCALES[language] || 'es-ES';
 
       recognition.onresult = (event: any) => {
         const current = event.resultIndex;
@@ -171,7 +174,7 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ isOpen, onClose 
         recognitionRef.current.stop();
       }
     };
-  }, []);
+  }, [language]);
 
   const transcriptRef = useRef(transcript);
   useEffect(() => {
@@ -230,11 +233,23 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ isOpen, onClose 
 
     if (isListening) {
       recognitionRef.current?.stop();
-    } else {
-      setTranscript('');
-      setResponse('');
-      recognitionRef.current?.start();
+      return;
+    }
+    // Firefox and some mobile browsers have no Web Speech API: never get stuck "listening"
+    if (!recognitionRef.current) {
+      toast.error(language === 'es'
+        ? 'Tu navegador no permite el reconocimiento de voz. Probá con Chrome o Edge.'
+        : 'Your browser does not support speech recognition. Try Chrome or Edge.');
+      return;
+    }
+    setTranscript('');
+    setResponse('');
+    try {
+      recognitionRef.current.start();
       setIsListening(true);
+    } catch (error) {
+      // start() throws if recognition is already running
+      console.warn('Speech recognition start:', error);
     }
   };
 

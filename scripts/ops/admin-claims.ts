@@ -10,7 +10,7 @@
  * revoke --apply also revokes refresh tokens so the change applies at the next token refresh.
  */
 import { getAuth } from "firebase-admin/auth";
-import { getArg, hasFlag, requireArg, initAdmin, describeTarget, fail } from "./lib";
+import { getArg, hasFlag, requireArg, initAdmin, describeTarget, fail, closeAdmin } from "./lib";
 
 const USAGE = "npx tsx scripts/ops/admin-claims.ts --project <id> <list | grant --email <email> | revoke --email <email>> [--apply]";
 
@@ -40,7 +40,7 @@ async function main() {
       pageToken = page.pageToken;
     } while (pageToken);
     console.log(`Total de cuentas con claim admin: ${admins}`);
-    await app.delete();
+    await closeAdmin(app);
     return;
   }
 
@@ -72,7 +72,7 @@ async function main() {
     if (command === "revoke") await auth.revokeRefreshTokens(user.uid);
     console.log("Aplicado. El usuario debe cerrar sesión y volver a entrar para que el cambio tenga efecto.");
   }
-  await app.delete();
+  await closeAdmin(app);
 }
 
 main().catch((error) => fail("admin-claims", error));

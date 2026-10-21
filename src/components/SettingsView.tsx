@@ -34,6 +34,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
+import { COMMUNITY_URL } from '../config/brand';
 
 export const SettingsView: React.FC = () => {
   const { user, userProfile, logout, updateProfile } = useAuth();
@@ -102,7 +103,7 @@ export const SettingsView: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const paymentStatus = params.get('payment');
     if (paymentStatus === 'success') {
-      toast.success('¡Pago procesado con éxito! Tu suscripción se actualizará en unos instantes.');
+      toast.success('¡Pago procesado con éxito! Tu plan se activará en unos instantes.');
       // Clean up URL
       window.history.replaceState({}, '', window.location.pathname);
     } else if (paymentStatus === 'failure') {
@@ -542,7 +543,7 @@ export const SettingsView: React.FC = () => {
                     <p className="text-sm text-on-surface-variant">¿Tenés dudas? Unite a nuestro Discord oficial para ayuda en tiempo real.</p>
                   </div>
                   <a 
-                    href="https://discord.gg/Y5yFKEYD9r" 
+                    href={COMMUNITY_URL} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 bg-[#5865F2] text-white rounded-2xl font-bold hover:scale-105 transition-all shadow-lg shadow-[#5865F2]/20"

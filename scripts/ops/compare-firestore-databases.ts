@@ -11,7 +11,7 @@
  * existence check. Instructions: docs/ops/FIRESTORE_COMPARISON.md
  */
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { requireArg, initAdmin, describeTarget, fail } from "./lib";
+import { requireArg, initAdmin, describeTarget, fail, closeAdmin } from "./lib";
 
 const USAGE = "npx tsx scripts/ops/compare-firestore-databases.ts --project <project-id> --named-db <database-id>";
 
@@ -58,7 +58,7 @@ async function main() {
   const results = await Promise.all(databases.map(async ([id, db]) => [id, await describe(db)] as const));
   const keys = Object.keys(results[0][1]);
   console.table(Object.fromEntries(keys.map((key) => [key, Object.fromEntries(results.map(([id, rows]) => [id, rows[key]]))])));
-  await app.delete();
+  await closeAdmin(app);
 }
 
 main().catch((error) => fail("compare-firestore", error));

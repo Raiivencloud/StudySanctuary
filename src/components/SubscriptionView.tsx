@@ -111,9 +111,9 @@ const SubscriptionView: React.FC = () => {
       id: 'mensual',
       name: SUBSCRIPTION_PLANS.MENSUAL.name,
       price: '$1.200',
-      period: '/mes',
+      period: 'pago único · 30 días',
       offer: SUBSCRIPTION_PLANS.MENSUAL.description,
-      features: ['300 Créditos de IA al mes', 'Grupos de estudio ilimitados', 'Sin anuncios', 'Soporte prioritario'],
+      features: ['300 Créditos de IA', 'Plan activo por 30 días', 'Grupos de estudio ilimitados', 'Sin anuncios', 'Soporte prioritario'],
       icon: Zap,
       color: 'bg-blue-500'
     },
@@ -122,9 +122,9 @@ const SubscriptionView: React.FC = () => {
       name: SUBSCRIPTION_PLANS.TRIMESTRAL.name,
       price: '$4.200',
       oldPrice: '$7.000',
-      period: '/3 meses',
+      period: 'pago único · 90 días',
       offer: SUBSCRIPTION_PLANS.TRIMESTRAL.description,
-      features: ['1.000 Créditos de IA', 'Insignia de Estudiante Destacado (Plata)', 'Acceso Prioritario'],
+      features: ['1.000 Créditos de IA', 'Plan activo por 90 días', 'Insignia de Estudiante Destacado (Plata)', 'Acceso Prioritario'],
       icon: Star,
       color: 'bg-gray-400',
       popular: true,
@@ -135,9 +135,9 @@ const SubscriptionView: React.FC = () => {
       name: SUBSCRIPTION_PLANS.ANUAL.name,
       price: '$12.000',
       oldPrice: '$18.000',
-      period: '/año',
+      period: 'pago único · 365 días',
       offer: SUBSCRIPTION_PLANS.ANUAL.description,
-      features: ['5.000 Créditos de IA', 'Insignia Leyenda de Honor (Oro)', 'Velocidad Turbo', 'Soporte Preferencial'],
+      features: ['5.000 Créditos de IA', 'Plan activo por 365 días', 'Insignia Leyenda de Honor (Oro)', 'Velocidad Turbo', 'Soporte Preferencial'],
       icon: ShieldCheck,
       color: 'bg-amber-500',
       savings: '¡Ahorrás $6.000!'
@@ -192,14 +192,15 @@ const SubscriptionView: React.FC = () => {
 
               <h3 className="text-2xl font-bold text-on-surface mb-1">{plan.name}</h3>
               <p className="text-xs font-bold text-primary mb-4">{plan.offer}</p>
-              <div className="flex items-center gap-2 mb-6">
-                {plan.oldPrice && (
-                  <span className="text-lg font-medium text-on-surface-variant/60 line-through">{plan.oldPrice}</span>
-                )}
-                <div className="flex items-baseline gap-1">
+              <div className="mb-6">
+                <div className="flex items-center gap-2">
+                  {plan.oldPrice && (
+                    <span className="text-lg font-medium text-on-surface-variant/60 line-through">{plan.oldPrice}</span>
+                  )}
                   <span className="text-4xl font-extrabold text-on-surface">{plan.price}</span>
-                  <span className="text-on-surface-variant text-sm">{plan.period}</span>
                 </div>
+                {/* One-time payment and its duration, on its own line so it never wraps next to the price */}
+                {plan.period && <p className="text-on-surface-variant text-sm mt-1">{plan.period}</p>}
               </div>
 
               <ul className="space-y-4 mb-8">
@@ -231,10 +232,10 @@ const SubscriptionView: React.FC = () => {
 
         <div className="mt-12 text-center">
           <p className="text-sm text-on-surface-variant opacity-80 max-w-2xl mx-auto mb-4">
-            1 Crédito = 1 Podcast, 1 set de ejercicios o 1 análisis de IA. El resto de la plataforma (biblioteca y comunidad) es libre para suscriptores.
+            1 Crédito = 1 Podcast, 1 set de ejercicios o 1 análisis de IA. El resto de la plataforma (biblioteca y comunidad) está incluido.
           </p>
           <p className="text-xs text-on-surface-variant opacity-60">
-            Puedes cancelar en cualquier momento. Al suscribirte, aceptas nuestros Términos de Servicio y Política de Privacidad.
+            Todos los planes son pagos únicos con Mercado Pago: no hay renovación automática ni débitos recurrentes. Al terminar el período, podés volver a comprar cuando quieras. Al comprar, aceptás nuestros Términos de Servicio y Política de Privacidad.
           </p>
         </div>
       </div>

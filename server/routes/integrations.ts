@@ -3,7 +3,8 @@
  * Every route requires a Firebase ID token; the provider tokens used are always the ones
  * connected by that same uid (one user can never act on another user's Drive).
  */
-import { Router, type RequestHandler } from "express";
+import crypto from "crypto";
+import { Router, type RequestHandler, type Response } from "express";
 import axios from "axios";
 import { requireUser, getUser, type AuthOptions } from "../security/auth";
 import { createRateLimiter } from "../security/rateLimit";
@@ -22,7 +23,25 @@ export interface IntegrationsRouterOptions {
   appUrl: string;
   maxUploadBytes: number;
   http?: HttpClient;
+  /** Google OAuth client, to renew expired access tokens with the refresh token. */
+  google?: { clientId?: string; clientSecret?: string };
+  now?: () => number;
 }
+
+/** Google file types that can be imported, and what they are exported to. */
+const GOOGLE_EXPORTS: Record<string, { mimeType: string; extension: string }> = {
+  "application/vnd.google-apps.document": { mimeType: "application/pdf", extension: "pdf" },
+  "application/vnd.google-apps.presentation": { mimeType: "application/pdf", extension: "pdf" },
+  "application/vnd.google-apps.drawing": { mimeType: "application/pdf", extension: "pdf" },
+  "application/vnd.google-apps.spreadsheet": { mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", extension: "xlsx" },
+};
+
+/** Lists only files that can be opened: no folders, forms, sites, shortcuts... */
+export const DRIVE_LIST_QUERY = "trashed = false and (not mimeType contains 'application/vnd.google-apps.' or " +
+  Object.keys(GOOGLE_EXPORTS).map((type) => `mimeType = '${type}'`).join(" or ") + ")";
+
+/** Google rejected the token (expired, revoked or without the needed scope): the user must reconnect. */
+const needsReconnect = (error: any) => error?.response?.status === 401 || error?.response?.status === 403;
 
 interface Exam {
   id: string;
@@ -49,20 +68,53 @@ export function createIntegrationsRouter(options: IntegrationsRouterOptions): Ro
   const http = options.http || axios;
   const authenticate = requireUser(options.auth);
 
-  const googleToken = async (uid: string) => (await options.tokens.get(uid, "google"))?.access_token || null;
+  const now = options.now || Date.now;
+
+  /** The user's Google access token, renewed with the refresh token shortly before it expires. */
+  const googleToken = async (uid: string): Promise<string | null> => {
+    const stored = await options.tokens.get(uid, "google");
+    if (!stored?.access_token) return null;
+    const expiring = typeof stored.expiry_date === "number" && stored.expiry_date - 60_000 <= now();
+    if (!expiring) return stored.access_token;
+    if (!stored.refresh_token || !options.google?.clientId || !options.google?.clientSecret) return null;
+    try {
+      const { data } = await http.post("https://oauth2.googleapis.com/token", {
+        client_id: options.google.clientId,
+        client_secret: options.google.clientSecret,
+        refresh_token: stored.refresh_token,
+        grant_type: "refresh_token",
+      });
+      const expiresIn = Number(data?.expires_in);
+      await options.tokens.set(uid, "google", {
+        ...stored,
+        access_token: data.access_token,
+        ...(Number.isFinite(expiresIn) && expiresIn > 0 ? { expiry_date: now() + expiresIn * 1000 } : {}),
+      });
+      return data.access_token || null;
+    } catch (error) {
+      logError("Google token refresh", error);
+      return null;
+    }
+  };
+
+  const driveFailed = (res: Response, error: unknown, context: string, message: string) => {
+    if (needsReconnect(error)) return res.status(401).json({ error: "Google not connected" });
+    logError(context, error);
+    res.status(500).json({ error: message });
+  };
 
   // Sync endpoint
   router.get("/api/calendar/sync", authenticate, async (req, res) => {
     const { uid } = getUser(res);
-    const google = await options.tokens.get(uid, "google");
+    const googleAccess = await googleToken(uid);
     const outlook = await options.tokens.get(uid, "outlook");
     const exams: any[] = [];
 
     // Fetch from Google if connected
-    if (google?.access_token) {
+    if (googleAccess) {
       try {
         const response = await http.get("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-          headers: { Authorization: `Bearer ${google.access_token}` },
+          headers: { Authorization: `Bearer ${googleAccess}` },
           params: {
             timeMin: new Date().toISOString(),
             maxResults: 10,
@@ -140,7 +192,7 @@ export function createIntegrationsRouter(options: IntegrationsRouterOptions): Ro
       }
     }
 
-    if (exams.length === 0 && !google && !outlook) {
+    if (exams.length === 0 && !googleAccess && !outlook) {
       return res.status(401).json({ error: "No calendar connected" });
     }
 
@@ -158,16 +210,16 @@ export function createIntegrationsRouter(options: IntegrationsRouterOptions): Ro
       const response = await http.get("https://www.googleapis.com/drive/v3/files", {
         headers: { Authorization: `Bearer ${accessToken}` },
         params: {
-          pageSize: 20,
+          pageSize: 50,
           fields: "files(id, name, mimeType, iconLink, webViewLink, size)",
-          q: "trashed = false"
+          q: DRIVE_LIST_QUERY,
+          orderBy: "modifiedTime desc",
         }
       });
 
-      res.json({ files: response.data.files });
+      res.json({ files: response.data.files || [] });
     } catch (error) {
-      logError("Google Drive list", error);
-      res.status(500).json({ error: "Failed to list files" });
+      driveFailed(res, error, "Google Drive list", "Failed to list files");
     }
   });
 
@@ -189,21 +241,20 @@ export function createIntegrationsRouter(options: IntegrationsRouterOptions): Ro
         params: { fields: "name, mimeType" }
       });
 
-      // If it's a Google Doc, we need to export it
-      if (metadata.data.mimeType.startsWith('application/vnd.google-apps.')) {
-        const isSpreadsheet = metadata.data.mimeType === 'application/vnd.google-apps.spreadsheet';
-        const exportMimeType = isSpreadsheet
-          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : 'application/pdf';
+      // Google Docs/Sheets/Slides/Drawings are exported; other Google types (forms, sites...) cannot be imported
+      if (String(metadata.data.mimeType).startsWith('application/vnd.google-apps.')) {
+        const target = GOOGLE_EXPORTS[metadata.data.mimeType];
+        if (!target) return res.status(415).json({ error: "UNSUPPORTED_GOOGLE_TYPE" });
 
         const response = await http.get(`https://www.googleapis.com/drive/v3/files/${fileId}/export`, {
           headers: { Authorization: `Bearer ${accessToken}` },
-          params: { mimeType: exportMimeType },
+          params: { mimeType: target.mimeType },
           responseType: 'arraybuffer'
         });
 
-        res.setHeader('Content-Type', exportMimeType);
-        res.setHeader('Content-Disposition', attachmentHeader(`${metadata.data.name}.${isSpreadsheet ? 'xlsx' : 'pdf'}`));
+        // The real type of the bytes sent (the client passes it on to the AI)
+        res.setHeader('Content-Type', target.mimeType);
+        res.setHeader('Content-Disposition', attachmentHeader(`${metadata.data.name}.${target.extension}`));
         return res.send(response.data);
       }
 
@@ -218,8 +269,7 @@ export function createIntegrationsRouter(options: IntegrationsRouterOptions): Ro
       res.setHeader('Content-Disposition', attachmentHeader(metadata.data.name));
       res.send(response.data);
     } catch (error) {
-      logError("Google Drive download", error);
-      res.status(500).json({ error: "Failed to download file" });
+      driveFailed(res, error, "Google Drive download", "Failed to download file");
     }
   });
 
@@ -252,12 +302,13 @@ export function createIntegrationsRouter(options: IntegrationsRouterOptions): Ro
 
       try {
         const metadata = {
-          name: req.file.originalname,
+          // multer exposes the original name as latin1: restore UTF-8 (accents, ñ)
+          name: Buffer.from(req.file.originalname, 'latin1').toString('utf8'),
           mimeType: req.file.mimetype
         };
 
-        // Multipart upload requires a specific format
-        const boundary = '-------314159265358979323846';
+        // Multipart upload; a random boundary cannot appear by chance inside the file
+        const boundary = `studysanctuary-${crypto.randomBytes(16).toString('hex')}`;
         const delimiter = `\r\n--${boundary}\r\n`;
         const closeDelimiter = `\r\n--${boundary}--`;
 
@@ -278,8 +329,7 @@ export function createIntegrationsRouter(options: IntegrationsRouterOptions): Ro
 
         res.json({ status: "ok", fileId: response.data.id });
       } catch (error) {
-        logError("Google Drive upload", error);
-        res.status(500).json({ error: "Failed to upload file" });
+        driveFailed(res, error, "Google Drive upload", "Failed to upload file");
       }
     }
   );

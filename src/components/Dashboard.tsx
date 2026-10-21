@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { estimateStudyHours, activityStreak, timeAgo } from '../lib/studyStats';
 import { BookOpen, Microscope, Calendar, Play, Pause, RotateCcw, BrainCircuit, Plus, X, Image as ImageIcon, Video, Trash2, MapPin, FileText, Loader2, Clock, Sparkles, Files, GraduationCap, Zap, Dumbbell, Network, Layers, Mic2, Bot, Calculator, Globe, ChevronRight, Gamepad2 } from 'lucide-react';
 import { MusicPlayer } from './MusicPlayer';
 import { UserCreditStats } from './UserCreditStats';
@@ -22,7 +23,13 @@ export const Dashboard: React.FC<{
   onUploadClick: () => void; 
   onMultimediaClick: () => void;
   onViewChange?: (view: any) => void;
-}> = ({ onCourseClick, onAiClick, onUploadClick, onMultimediaClick, onViewChange }) => {
+  /** "courses": the sidebar's Cursos entry, which shows this same page scrolled to the course list. */
+  focus?: 'courses';
+}> = ({ onCourseClick, onAiClick, onUploadClick, onMultimediaClick, onViewChange, focus }) => {
+  const coursesSectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focus === 'courses') coursesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [focus]);
   const isVisible = useVisibility();
   const { language } = useLanguage();
   const { courses, addCourse, tasks, activities, toggleTask, addActivity, exams, updateCourse } = useCourses();
@@ -196,8 +203,8 @@ export const Dashboard: React.FC<{
   const stats = [
     { label: 'Cursos Recientes', value: courses.length.toString(), icon: BookOpen, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
     { label: 'Créditos', value: credits.toString(), icon: Sparkles, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-    { label: 'Horas de Estudio', value: '24.5', icon: Clock, color: 'text-pink-400', bg: 'bg-pink-500/10' },
-    { label: 'Racha Diaria', value: '12', icon: Zap, color: 'text-rose-400', bg: 'bg-rose-500/10' },
+    { label: 'Horas de Estudio', value: estimateStudyHours(courses).toString(), icon: Clock, color: 'text-pink-400', bg: 'bg-pink-500/10' },
+    { label: 'Racha Diaria', value: activityStreak(activities).toString(), icon: Zap, color: 'text-rose-400', bg: 'bg-rose-500/10' },
   ];
 
   return (
@@ -395,7 +402,7 @@ export const Dashboard: React.FC<{
           </section>
 
           {/* Recent Courses */}
-          <section className="space-y-8">
+          <section ref={coursesSectionRef} id="courses" className="space-y-8 scroll-mt-6">
             <div className="flex items-center justify-center gap-8">
               <h3 className="text-2xl font-bold text-white tracking-tight">
                 Cursos Recientes
@@ -428,10 +435,19 @@ export const Dashboard: React.FC<{
                     <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-6 border border-white/10 group-hover:scale-110 transition-transform">
                       {course.icon === 'book' ? <BookOpen size={40} className="text-white/40" /> : <Microscope size={40} className="text-white/40" />}
                     </div>
-                    <p className="text-lg font-medium text-white/40 mb-2 uppercase tracking-widest">Aún no hay cursos</p>
-                    <button className="text-blue-500 font-bold hover:underline">Crea tu primer curso</button>
+                    <p className="text-lg font-bold text-white mb-1">{course.title}</p>
+                    {course.subtitle && <p className="text-sm text-white/50 mb-4">{course.subtitle}</p>}
+                    <div className="w-full max-w-xs">
+                      <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">
+                        <span>{course.studyLevel || 'Curso'}</span>
+                        <span>{Math.round(course.progress || 0)}%</span>
+                      </div>
+                      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, Math.max(0, course.progress || 0))}%` }} />
+                      </div>
+                    </div>
                   </motion.div>
-                )).slice(0, 1) // Only show one placeholder style as per image if empty
+                ))
               ) : (
                 <div className="py-24 flex flex-col items-center justify-center bg-white/5 backdrop-blur-md rounded-[2.5rem] border border-white/10 border-dashed">
                   <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-6">
@@ -514,9 +530,23 @@ export const Dashboard: React.FC<{
               </h3>
             </div>
             
-            <div className="py-10 flex flex-col items-center justify-center text-center">
-              <p className="text-sm font-medium text-white/40 italic mb-8">No hay actividad reciente</p>
-              <button className="px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-[10px] font-bold text-blue-400 uppercase tracking-widest hover:bg-white/10 transition-all">
+            <div className="py-10 flex flex-col items-center justify-center text-center w-full">
+              {activities.length > 0 ? (
+                <ul className="w-full space-y-3 mb-8 text-left">
+                  {activities.slice(0, 4).map((activity) => (
+                    <li key={activity.id} className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-white truncate">{activity.title}</p>
+                        <p className="text-xs text-white/40 truncate">{activity.description}</p>
+                      </div>
+                      <span className="text-[10px] text-white/40 whitespace-nowrap">{Number.isFinite(activity.timestamp) ? timeAgo(activity.timestamp) : activity.time}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm font-medium text-white/40 italic mb-8">No hay actividad reciente</p>
+              )}
+              <button onClick={() => onAiClick()} className="px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-[10px] font-bold text-blue-400 uppercase tracking-widest hover:bg-white/10 transition-all">
                 Abrir Asistente de Estudio
               </button>
             </div>
