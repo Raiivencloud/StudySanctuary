@@ -10,12 +10,10 @@ import express from "express";
 import path from "path";
 import session from "express-session";
 import cookieParser from "cookie-parser";
-import axios from "axios";
 import compression from "compression";
 import "dotenv/config";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
-import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { loadServerConfig, ConfigError, type ServerConfig } from "./server/config";
 import { GoogleGenAI } from "@google/genai";
 import { FieldValue } from "firebase-admin/firestore";
@@ -28,6 +26,9 @@ import { createStorageUploadRouter } from "./server/routes/storageUpload";
 import { createOAuthRouter } from "./server/routes/oauth";
 import { createIntegrationsRouter } from "./server/routes/integrations";
 import { InMemoryTokenStore } from "./server/integrations/tokenStore";
+import { createPaymentsRouter } from "./server/routes/payments";
+import { createPaymentService } from "./server/payments/paymentService";
+import { createFakeGateway, createMercadoPagoGateway } from "./server/payments/gateway";
 import { createRateLimiter, ipKey } from "./server/security/rateLimit";
 import { securityHeaders, apiErrorHandler, logError } from "./server/security/http";
 import { cspReportOnly, createCspReportRouter } from "./server/security/csp";
@@ -73,9 +74,6 @@ const dbAdmin = serverConfig.firebase.databaseId
   ? getFirestore(admin.app(), serverConfig.firebase.databaseId)
   : admin.firestore();
 const storageAdmin = admin.storage();
-
-// Initialize Mercado Pago
-const MP_PUBLIC_KEY = process.env.MERCADOPAGO_PUBLIC_KEY || "";
 
 declare module 'express-session' {
   interface SessionData {
@@ -292,138 +290,38 @@ async function startServer() {
     maxUploadBytes: serverConfig.uploads.maxBytes,
   }));
 
+  // Mercado Pago return URL: keep the parameters Mercado Pago appends (payment_id, status...).
   app.get('/success', (req, res) => {
-    res.redirect('/?view=success');
+    const query = new URLSearchParams(req.query as Record<string, string>);
+    query.set('view', 'success');
+    res.redirect(`/?${query.toString()}`);
   });
 
-  // Mercado Pago Integration
-  const preferenceLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10, key: ipKey });
-
-  app.post("/api/create-preference", preferenceLimiter, async (req, res) => {
-    const { planId, userId, userEmail } = req.body;
-    
-    if (!userId || !planId) {
-      return res.status(400).json({ error: "Faltan parámetros: userId o planId" });
-    }
-
-    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
-    const publicKey = process.env.MERCADOPAGO_PUBLIC_KEY;
-
-    if (!accessToken) {
-      return res.status(500).json({ error: "Token de acceso de Mercado Pago no configurado" });
-    }
-
-    const mpClient = new MercadoPagoConfig({ accessToken });
-
-    const plans: Record<string, { title: string, price: number, duration: number }> = {
-      'mensual': { title: 'Plan Mensual - Study Sanctuary', price: 1200, duration: 30 },
-      'trimestral': { title: 'Plan Trimestral - Study Sanctuary', price: 4200, duration: 90 },
-      'anual': { title: 'Plan Anual - Study Sanctuary', price: 12000, duration: 365 }
-    };
-
-    const plan = plans[planId];
-    if (!plan) return res.status(400).json({ error: "Invalid planId" });
-
-    try {
-      const preference = new Preference(mpClient);
-      const result = await preference.create({
-        body: {
-          items: [
-            {
-              id: planId,
-              title: plan.title,
-              quantity: 1,
-              unit_price: plan.price,
-              currency_id: 'ARS'
-            }
-          ],
-          payer: {
-            email: userEmail
-          },
-          back_urls: {
-            success: `https://studysanctuary.net/success`,
-            failure: `https://studysanctuary.net/pricing`,
-            pending: `https://studysanctuary.net/pricing`
-          },
-          auto_return: 'approved',
-          notification_url: `${APP_URL}/api/mercadopago-webhook`,
-          external_reference: userId,
-          metadata: {
-            userId,
-            planId,
-            duration: plan.duration
-          }
-        }
-      });
-
-      if (!result.init_point) {
-        throw new Error("No se recibió el link de pago (init_point) de Mercado Pago");
-      }
-
-      res.json({ id: result.id, init_point: result.init_point });
-    } catch (error: any) {
-      logError("Mercado Pago preference", error);
-      res.status(500).json({ error: "Error de Mercado Pago: no se pudo crear la preferencia de pago." });
-    }
-  });
-
-  app.post("/api/mercadopago-webhook", async (req, res) => {
-    const { type, data } = req.body;
-    
-    console.log(`[Webhook] Received Mercado Pago notification: ${type}`);
-
-    if (type === 'payment') {
-      const paymentId = data.id;
-      try {
-        const response = await axios.get(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-          headers: { Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` }
-        });
-
-        const payment = response.data;
-        if (payment.status === 'approved') {
-          const userId = payment.external_reference || payment.metadata?.user_id;
-          const planId = payment.metadata?.plan_id;
-          const duration = payment.metadata?.duration || 30;
-
-          if (userId && planId) {
-            console.log(`[Webhook] Updating subscription for user ${userId} (Plan: ${planId})`);
-            
-            const userRef = dbAdmin.collection('users').doc(userId);
-            const now = admin.firestore.Timestamp.now();
-            const endDate = admin.firestore.Timestamp.fromMillis(now.toMillis() + duration * 24 * 60 * 60 * 1000);
-
-            // Map planId to credits and display name
-            const planDetails: Record<string, { credits: number, name: string }> = {
-              'mensual': { credits: 300, name: 'Plan Mensual' },
-              'trimestral': { credits: 1000, name: 'Plan Trimestral' },
-              'anual': { credits: 5000, name: 'Plan Anual' }
-            };
-
-            const details = planDetails[planId] || { credits: 0, name: 'Gratis' };
-
-            await userRef.set({
-              remainingCredits: details.credits,
-              subscriptionType: details.name,
-              subscription: {
-                status: 'active',
-                type: planId,
-                planName: details.name,
-                subscriptionEndDate: endDate,
-                lastPaymentId: paymentId,
-                updatedAt: now
-              }
-            }, { merge: true });
-            
-            console.log(`[Webhook] Subscription and credits updated successfully for ${userId}`);
-          }
-        }
-      } catch (error: any) {
-        console.error("Webhook Error processing payment:", error.response?.data || error.message);
-      }
-    }
-
-    res.status(200).send("OK");
-  });
+  // Payments (Phase 5): server/payments. Plans are granted in dbAdmin, the database the app reads.
+  const fakeGateway = serverConfig.payments.mode === "fake"
+    ? createFakeGateway({ checkoutUrl: (id) => `${APP_URL}/api/payments/dev/checkout/${id}` })
+    : undefined;
+  const paymentGateway = fakeGateway
+    || (serverConfig.payments.mode === "mercadopago" ? createMercadoPagoGateway(serverConfig.payments.accessToken!) : undefined);
+  app.use(createPaymentsRouter({
+    auth: authOptions,
+    payments: paymentGateway
+      ? createPaymentService(dbAdmin, { gateway: paymentGateway, appUrl: APP_URL, requireLiveMode: !serverConfig.payments.allowTestPayments })
+      : undefined,
+    webhookSecret: serverConfig.payments.webhookSecret,
+    fakeGateway,
+    appUrl: APP_URL,
+    readProfile: async (uid) => {
+      const data = (await dbAdmin.collection("users").doc(uid).get()).data();
+      if (!data) return null;
+      return {
+        credits: typeof data.remainingCredits === "number" ? data.remainingCredits : 0,
+        planName: data.subscriptionType || "Gratis",
+        planId: data.subscription?.type,
+        status: data.subscription?.status,
+      };
+    },
+  }));
 
   // JSON errors for the API (no stack traces or internal messages)
   app.use("/api", apiErrorHandler);

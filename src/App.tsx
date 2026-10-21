@@ -218,7 +218,7 @@ export default function App() {
                   {currentView === 'course-detail' && <CourseDetail courseId={selectedCourseId || ''} />}
                   {currentView === 'settings' && <SettingsView />}
                   {currentView === 'subscription' && <SubscriptionView />}
-                  {currentView === 'success' && <SubscriptionSuccess planName="Plan" credits={0} planId="mensual" />}
+                  {currentView === 'success' && <SubscriptionSuccess />}
                   {currentView === 'files' && <FilesView />}
                   {currentView === 'multimedia' && <MultimediaGenerator />}
                   {currentView === 'help-center' && <HelpCenterView />}

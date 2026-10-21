@@ -8,6 +8,15 @@ import { db } from '../firebase';
 import { toast } from 'sonner';
 import { hasUsedFreeTrial, updateSubscription } from '../services/userService';
 import { SUBSCRIPTION_PLANS } from '../constants';
+import { authFetch } from '../lib/authFetch';
+
+const PAYMENT_ERRORS: Record<string, string> = {
+  UNAUTHENTICATED: 'Tu sesión expiró. Volvé a iniciar sesión.',
+  PROFILE_NOT_FOUND: 'Tu perfil todavía no está listo. Intentá de nuevo en unos segundos.',
+  PAYMENTS_DISABLED: 'Los pagos no están disponibles en este momento.',
+  RATE_LIMITED: 'Demasiados intentos. Esperá un minuto.',
+  PAYMENT_PROVIDER_ERROR: 'Mercado Pago no respondió. Intentá de nuevo en unos minutos.',
+};
 
 const SubscriptionView: React.FC = () => {
   const { user, userProfile, logout } = useAuth();
@@ -19,6 +28,15 @@ const SubscriptionView: React.FC = () => {
       hasUsedFreeTrial(user.uid).then(setUsedTrial);
     }
   }, [user]);
+
+  // Return from Mercado Pago when the payment failed (back_urls.failure)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') === 'failure') {
+      toast.error('El pago no se completó. Podés intentarlo de nuevo.');
+      window.history.replaceState({}, '', `${window.location.pathname}?view=subscription`);
+    }
+  }, []);
 
   const handleSubscribe = async (planId: string) => {
     if (!user) {
@@ -41,19 +59,16 @@ const SubscriptionView: React.FC = () => {
     }
     
     try {
-      const response = await fetch('/api/create-preference', {
+      // The server takes the user and email from the ID token (Phase 5)
+      const response = await authFetch('/api/create-preference', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planId,
-          userId: user.uid,
-          userEmail: user.email
-        })
+        body: JSON.stringify({ planId })
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Error al crear la preferencia de pago');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(PAYMENT_ERRORS[errorData.error] || 'Error al crear la preferencia de pago');
       }
 
       const { init_point } = await response.json();

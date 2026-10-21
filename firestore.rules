@@ -387,6 +387,15 @@ service cloud.firestore {
       }
     }
 
+    // Payments (Phase 5): orders and Mercado Pago payment records are written and read only by
+    // the server (Admin SDK). Users see their granted or revoked plans in users/{uid}/creditLedger.
+    match /paymentOrders/{orderId} {
+      allow read, write: if false;
+    }
+    match /payments/{paymentId} {
+      allow read, write: if false;
+    }
+
     // Study Groups
     match /groups/{groupId} {
       // Allow any authenticated user to see groups to join

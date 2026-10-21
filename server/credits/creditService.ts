@@ -14,6 +14,7 @@
  */
 import { FieldValue, Timestamp, type Firestore, type Transaction, type DocumentReference } from "firebase-admin/firestore";
 import { SUBSCRIPTION_PLANS } from "../../src/constants";
+import { getPaidPlan, type PaidPlan } from "../payments/plans";
 
 export const DAILY_REFILL_CREDITS = 5;
 export const FREE_PLAN_NAME = "Gratis";
@@ -29,11 +30,22 @@ export class CreditError extends Error {
   }
 }
 
-const PAID_PLANS: Record<string, { name: string; credits: number; durationDays: number }> = {
-  mensual: { name: SUBSCRIPTION_PLANS.MENSUAL.name, credits: SUBSCRIPTION_PLANS.MENSUAL.credits, durationDays: 30 },
-  trimestral: { name: SUBSCRIPTION_PLANS.TRIMESTRAL.name, credits: SUBSCRIPTION_PLANS.TRIMESTRAL.credits, durationDays: 90 },
-  anual: { name: SUBSCRIPTION_PLANS.ANUAL.name, credits: SUBSCRIPTION_PLANS.ANUAL.credits, durationDays: 365 },
-};
+/**
+ * Writes that grant a paid plan (shared by applyPlanPurchase and the payment transaction).
+ * Current business rule: the plan's credits REPLACE the balance; the end date counts from now.
+ */
+export function planPurchaseWrites(tx: Transaction, user: DocumentReference, entry: DocumentReference, plan: PaidPlan, paymentId: string, start: Date) {
+  const endDate = Timestamp.fromMillis(start.getTime() + plan.durationDays * 24 * 60 * 60 * 1000);
+  tx.set(user, {
+    remainingCredits: plan.credits,
+    subscriptionType: plan.name,
+    subscription: {
+      status: "active", type: plan.id, planName: plan.name, subscriptionEndDate: endDate,
+      lastPaymentId: paymentId, updatedAt: Timestamp.fromDate(start),
+    },
+  }, { merge: true });
+  tx.set(entry, { type: "plan_purchase", planId: plan.id, amount: plan.credits, balanceAfter: plan.credits, createdAt: FieldValue.serverTimestamp() });
+}
 
 export interface Balance {
   credits: number;
@@ -181,7 +193,7 @@ export function createCreditService(db: Firestore, options: CreditServiceOptions
      * paymentId. Keeps the current business rule: the plan's credits replace the balance.
      */
     async applyPlanPurchase(uid: string, planId: string, paymentId: string): Promise<{ applied: boolean }> {
-      const plan = PAID_PLANS[planId];
+      const plan = getPaidPlan(planId);
       if (!plan) throw new CreditError("UNKNOWN_PLAN");
       if (!/^[0-9A-Za-z_-]{1,64}$/.test(paymentId)) throw new CreditError("INVALID_REQUEST_ID");
 
@@ -192,17 +204,7 @@ export function createCreditService(db: Firestore, options: CreditServiceOptions
         if (!snap.exists) throw new CreditError("USER_NOT_FOUND");
         if (existing.exists) return { applied: false };
 
-        const start = now();
-        const endDate = Timestamp.fromMillis(start.getTime() + plan.durationDays * 24 * 60 * 60 * 1000);
-        tx.set(ref, {
-          remainingCredits: plan.credits,
-          subscriptionType: plan.name,
-          subscription: {
-            status: "active", type: planId, planName: plan.name, subscriptionEndDate: endDate,
-            lastPaymentId: paymentId, updatedAt: Timestamp.fromDate(start),
-          },
-        }, { merge: true });
-        tx.set(entry, { type: "plan_purchase", planId, amount: plan.credits, balanceAfter: plan.credits, createdAt: FieldValue.serverTimestamp() });
+        planPurchaseWrites(tx, ref, entry, plan, paymentId, now());
         return { applied: true };
       }, { maxAttempts });
     },

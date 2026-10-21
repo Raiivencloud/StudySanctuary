@@ -65,14 +65,19 @@ npx tsx scripts/legacy-config-to-env.ts /ruta/a/firebase-applet-config.json >> .
 | `AI_MAX_UPSTREAM_ATTEMPTS`, `AI_UPSTREAM_TIMEOUT_MS` | No | Reintentos y modelos de respaldo por solicitud (4 por defecto) y tiempo máximo por intento (90 s por defecto). |
 
 Con `AI_PROXY_ENABLED=true`, el servidor **no arranca** si `FIREBASE_DATABASE_ID` y `VITE_FIREBASE_FIRESTORE_DATABASE_ID` (cuando está presente en el entorno) apuntan a bases distintas: los créditos se cobrarían en una base que la app no lee.
-| `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_PUBLIC_KEY` | Para pagos | — |
+| `MERCADOPAGO_ACCESS_TOKEN` | Para pagos | Token **del servidor**. Sin él, los pagos responden 503. |
+| `MERCADOPAGO_WEBHOOK_SECRET` | **Sí en producción**, si hay token | Clave secreta de Webhooks del panel de Mercado Pago. El webhook rechaza (401) lo que no esté firmado con ella. |
+| `MERCADOPAGO_MODE` | No | `fake` = Mercado Pago simulado para desarrollo (**rechazado en producción**). |
+| `MERCADOPAGO_ALLOW_TEST_PAYMENTS` | No | `true` acepta pagos de prueba (`live_mode: false`) en producción. Solo para un entorno de prueba. |
+
+Con pagos activos, el servidor **no arranca** si `FIREBASE_DATABASE_ID` y `VITE_FIREBASE_FIRESTORE_DATABASE_ID` apuntan a bases distintas: los planes se acreditarían en una base que la app no lee. `MERCADOPAGO_PUBLIC_KEY` ya no se usa (el checkout es una redirección de Checkout Pro).
 | `GOOGLE_CLIENT_ID/SECRET`, `OUTLOOK_CLIENT_ID/SECRET` | Para Calendar y Drive | — |
 
 Credenciales de Firebase Admin: *Application Default Credentials* (la cuenta de servicio de Cloud Run o `gcloud auth application-default login` en local).
 
 Si la configuración es inválida, el servidor termina con código 1 y un mensaje que lista **todos** los problemas, antes de inicializar Firebase.
 
-> **Aviso: el servidor y el cliente usaban bases de Firestore distintas.** Antes de este cambio, el servidor (`admin.firestore()`) usaba siempre `(default)`, mientras el cliente usaba la base con nombre del config. Por lo tanto, el **webhook de Mercado Pago escribía las suscripciones en una base que la app no lee**. Para no cambiar el comportamiento de pagos sin aprobación, `FIREBASE_DATABASE_ID` queda vacío por defecto (igual que antes). Corregirlo requiere decidir y verificar en qué base están hoy los datos (pendiente, fase de pagos). `npm run verify:config` avisa si las dos bases no coinciden.
+> **Aviso: el servidor y el cliente usaban bases de Firestore distintas.** Antes de este cambio, el servidor (`admin.firestore()`) usaba siempre `(default)`, mientras el cliente usaba la base con nombre del config. Por lo tanto, el **webhook de Mercado Pago escribía las suscripciones en una base que la app no lee**. Para no cambiar el comportamiento de pagos sin aprobación, `FIREBASE_DATABASE_ID` queda vacío por defecto (igual que antes). Corregirlo requiere decidir y verificar en qué base están hoy los datos. Desde la Fase 5, con pagos activos el servidor no arranca si las dos bases no coinciden (ver `PHASE5_PAYMENTS.md`, sección 5).
 
 ## Comandos de verificación
 

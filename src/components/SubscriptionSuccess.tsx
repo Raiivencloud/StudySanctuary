@@ -1,17 +1,86 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2, MessageCircle } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { authFetch } from '../lib/authFetch';
+import { refreshCredits } from '../services/userService';
 
-interface SubscriptionSuccessProps {
-  planName: string;
-  credits: number;
-  planId: string;
+type PaymentState = 'checking' | 'approved' | 'pending' | 'failed';
+
+interface SyncResponse {
+  outcome: string;
+  status: string | null;
+  planId: string | null;
+  profile: { credits: number; planName: string; planId?: string } | null;
 }
 
-export const SubscriptionSuccess: React.FC<SubscriptionSuccessProps> = ({ planName, credits, planId }) => {
-  const { userProfile } = useAuth();
+const PENDING = new Set(['pending', 'in_process', 'authorized']);
+const MAX_CHECKS = 8;
+
+/**
+ * Return page of Mercado Pago (/success). Asks the server for the REAL state of the payment
+ * (POST /api/payments/sync): the plan is only shown as active once the server granted it.
+ */
+export const SubscriptionSuccess: React.FC = () => {
+  const { user, userProfile } = useAuth();
   const displayName = userProfile?.displayName || 'estudiante';
+  const [state, setState] = React.useState<PaymentState>('checking');
+  const [plan, setPlan] = React.useState<{ planName: string; credits: number; planId?: string }>({ planName: 'Plan', credits: 0 });
+
+  React.useEffect(() => {
+    if (!user) return;
+    const params = new URLSearchParams(window.location.search);
+    const paymentId = params.get('payment_id') || params.get('collection_id');
+    if (!paymentId || paymentId === 'null') {
+      setState(params.get('status') === 'approved' ? 'pending' : 'failed');
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const check = async (attempt: number) => {
+      try {
+        const response = await authFetch('/api/payments/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentId }),
+        });
+        if (cancelled) return;
+        const data: SyncResponse | null = response.ok ? await response.json() : null;
+        if (data && (data.outcome === 'applied' || data.outcome === 'already_applied')) {
+          if (data.profile) setPlan({ planName: data.profile.planName, credits: data.profile.credits, planId: data.planId || data.profile.planId });
+          setState('approved');
+          refreshCredits(user.uid);
+          return;
+        }
+        // Retry while Mercado Pago has not settled it (or is briefly unavailable); 4xx means it is not this user's payment
+        const stillPending = response.status >= 500
+          || (data !== null && data.status !== null && PENDING.has(data.status))
+          || (data !== null && data.outcome === 'ignored' && data.status === null);
+        if (stillPending && attempt < MAX_CHECKS) {
+          setState('pending');
+          timer = setTimeout(() => check(attempt + 1), 4000);
+          return;
+        }
+        setState(stillPending ? 'pending' : 'failed');
+      } catch {
+        if (!cancelled && attempt < MAX_CHECKS) timer = setTimeout(() => check(attempt + 1), 4000);
+        else if (!cancelled) setState('pending');
+      }
+    };
+    check(1);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [user]);
+
+  const copy = {
+    checking: { title: 'Confirmando tu pago...', text: 'Estamos verificando el pago con Mercado Pago.', badge: '' },
+    approved: { title: `¡Bienvenido a la élite, ${displayName}!`, text: 'Tu suscripción está activa. Disfruta de tus créditos ilimitados y tu Insignia de Honor.', badge: `${plan.planName} - ${plan.credits} Créditos Activos` },
+    pending: { title: 'Tu pago está en proceso', text: 'Mercado Pago todavía no lo acreditó. Tu plan se activará automáticamente apenas se confirme; no hace falta volver a pagar.', badge: 'Pago pendiente de acreditación' },
+    failed: { title: 'No pudimos confirmar el pago', text: 'El pago no fue aprobado o no corresponde a tu cuenta. Si se te cobró, escribinos desde Ayuda y lo revisamos.', badge: '' },
+  }[state];
+  const Icon = state === 'approved' ? CheckCircle2 : state === 'failed' ? AlertCircle : Clock;
+  const iconColor = state === 'approved' ? 'text-emerald-500' : state === 'failed' ? 'text-red-500' : 'text-amber-500';
+  const planId = plan.planId;
 
   return (
     <motion.div
@@ -26,14 +95,16 @@ export const SubscriptionSuccess: React.FC<SubscriptionSuccessProps> = ({ planNa
           transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
           className="mx-auto mb-6"
         >
-          <CheckCircle2 className="w-20 h-20 text-emerald-500 mx-auto" />
+          <Icon className={`w-20 h-20 mx-auto ${iconColor}`} />
         </motion.div>
-        <h2 className="text-3xl font-bold text-on-surface mb-4">¡Bienvenido a la élite, {displayName}!</h2>
-        <p className="text-on-surface-variant mb-8">Tu suscripción está activa. Disfruta de tus créditos ilimitados y tu Insignia de Honor.</p>
+        <h2 className="text-3xl font-bold text-on-surface mb-4">{copy.title}</h2>
+        <p className="text-on-surface-variant mb-8">{copy.text}</p>
         
-        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 mb-8">
-          <p className="text-emerald-500 font-bold text-lg">{planName} - {credits} Créditos Activos</p>
-        </div>
+        {copy.badge && (
+          <div className={state === 'approved' ? "bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 mb-8" : "bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-8"}>
+            <p className={state === 'approved' ? "text-emerald-500 font-bold text-lg" : "text-amber-500 font-bold text-lg"}>{copy.badge}</p>
+          </div>
+        )}
 
         <button 
           onClick={() => window.location.href = '/'}
@@ -42,7 +113,7 @@ export const SubscriptionSuccess: React.FC<SubscriptionSuccessProps> = ({ planNa
           Empezar a Estudiar Ahora
         </button>
         
-        {planId === 'anual' && (
+        {state === 'approved' && planId === 'anual' && (
           <a 
             href="https://discord.gg/Y5yFKEYD9r"
             target="_blank"

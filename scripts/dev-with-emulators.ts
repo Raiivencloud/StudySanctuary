@@ -11,6 +11,7 @@
  */
 import fs from "fs";
 import os from "os";
+import crypto from "crypto";
 import path from "path";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
@@ -41,6 +42,10 @@ const env = {
   AI_PROXY_ENABLED: "true",
   AI_PROVIDER: "fake",
   GEMINI_API_KEY: "",
+  // Simulated Mercado Pago with signed webhooks (random secret per run, never a real credential)
+  MERCADOPAGO_MODE: "fake",
+  MERCADOPAGO_ACCESS_TOKEN: "",
+  MERCADOPAGO_WEBHOOK_SECRET: crypto.randomBytes(24).toString("hex"),
   VITE_USE_FIREBASE_EMULATORS: "true",
   VITE_FIREBASE_API_KEY: "demo-api-key",
   VITE_FIREBASE_AUTH_DOMAIN: "demo-studysanctuary.firebaseapp.com",

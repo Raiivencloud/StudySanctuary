@@ -59,6 +59,15 @@ export interface ServerConfig {
     maxAttempts: number;
     timeoutMs: number;
   };
+  payments: {
+    /** "mercadopago" (MERCADOPAGO_ACCESS_TOKEN), "fake" (simulated, development only) or "disabled". */
+    mode: "mercadopago" | "fake" | "disabled";
+    accessToken?: string;
+    /** Webhook signature secret (required in production). */
+    webhookSecret?: string;
+    /** Accept test payments (live_mode false). Always in development; in production only with MERCADOPAGO_ALLOW_TEST_PAYMENTS=true. */
+    allowTestPayments: boolean;
+  };
 }
 
 export class ConfigError extends Error {
@@ -179,6 +188,36 @@ export function loadServerConfig(env: Env = process.env): ServerConfig {
   const aiMaxAttempts = readPositiveInt(env, "AI_MAX_UPSTREAM_ATTEMPTS", 4, problems);
   const aiTimeoutMs = readPositiveInt(env, "AI_UPSTREAM_TIMEOUT_MS", 90_000, problems);
 
+  // Payments (Phase 5): Mercado Pago, simulated (development) or disabled.
+  const mpAccessToken = read(env, "MERCADOPAGO_ACCESS_TOKEN") || undefined;
+  const mpWebhookSecret = read(env, "MERCADOPAGO_WEBHOOK_SECRET") || undefined;
+  const mpModeRaw = read(env, "MERCADOPAGO_MODE").toLowerCase();
+  if (mpModeRaw && mpModeRaw !== "fake" && mpModeRaw !== "mercadopago") {
+    problems.push("MERCADOPAGO_MODE debe ser mercadopago o fake.");
+  }
+  const paymentsMode: "mercadopago" | "fake" | "disabled" =
+    mpModeRaw === "fake" ? "fake" : mpAccessToken ? "mercadopago" : "disabled";
+  if (paymentsMode === "fake" && isProduction) {
+    problems.push("MERCADOPAGO_MODE=fake (pagos simulados) no está permitido en producción.");
+  }
+  if (mpModeRaw === "mercadopago" && !mpAccessToken) {
+    problems.push("MERCADOPAGO_MODE=mercadopago requiere MERCADOPAGO_ACCESS_TOKEN.");
+  }
+  if (paymentsMode === "mercadopago" && isProduction && !mpWebhookSecret) {
+    problems.push("MERCADOPAGO_WEBHOOK_SECRET es obligatoria en producción (clave secreta de Webhooks del panel de Mercado Pago).");
+  }
+  if (paymentsMode !== "disabled" && isProduction && !read(env, "APP_URL")) {
+    problems.push("Los pagos requieren APP_URL (URLs de retorno y de notificación).");
+  }
+  // Plans are granted in the server's database: it must be the one the app reads.
+  if (paymentsMode !== "disabled" && read(env, "VITE_FIREBASE_FIRESTORE_DATABASE_ID") && clientDatabase !== serverDatabase) {
+    problems.push(
+      `FIREBASE_DATABASE_ID ("${serverDatabase}") no coincide con VITE_FIREBASE_FIRESTORE_DATABASE_ID ("${clientDatabase}"): ` +
+      "los pagos se acreditarían en una base distinta de la que lee la app (ver docs/FIRESTORE_DATABASES.md)."
+    );
+  }
+  const allowTestPayments = read(env, "MERCADOPAGO_ALLOW_TEST_PAYMENTS") === "true" || !isProduction;
+
   if (problems.length > 0) {
     throw new ConfigError(problems);
   }
@@ -214,6 +253,12 @@ export function loadServerConfig(env: Env = process.env): ServerConfig {
       includedDailyQuota: aiIncludedDailyQuota,
       maxAttempts: aiMaxAttempts,
       timeoutMs: aiTimeoutMs,
+    },
+    payments: {
+      mode: paymentsMode,
+      accessToken: mpAccessToken,
+      webhookSecret: mpWebhookSecret,
+      allowTestPayments,
     },
   };
 }
