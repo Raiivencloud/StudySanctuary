@@ -20,6 +20,7 @@ export interface ArenaUserStats {
   streak: number;
   maxStreak: number;
   lastLifeLostAt?: any;
+  lastAnsweredAt?: any;
   cooldownUntil?: any;
   credits: number;
   totalPoints: number;

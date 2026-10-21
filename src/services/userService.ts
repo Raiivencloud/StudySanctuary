@@ -112,7 +112,8 @@ export const consumeCredit = async (userId: string) => {
         remainingCredits: newCredits
       });
       
-      // Log global consumption (efficiently in a single doc)
+      // Log global consumption (efficiently in a single doc). Best effort: the security rules
+      // only let the server/admins write stats, so a failure here must never block the user.
       const statsRef = doc(db, 'stats', 'global');
       try {
         await updateDoc(statsRef, {
@@ -120,11 +121,15 @@ export const consumeCredit = async (userId: string) => {
           totalCreditsConsumed: increment(1)
         });
       } catch (e) {
-        // If doc doesn't exist, create it
-        await setDoc(statsRef, {
-          [`credits_${today}`]: 1,
-          totalCreditsConsumed: 1
-        }, { merge: true });
+        try {
+          // If doc doesn't exist, create it
+          await setDoc(statsRef, {
+            [`credits_${today}`]: 1,
+            totalCreditsConsumed: 1
+          }, { merge: true });
+        } catch (statsError) {
+          console.warn('[CreditSystem] Usage stats not recorded (server-side only).');
+        }
       }
 
       console.log(`[CreditSystem] Credit consumed successfully. New credits: ${newCredits}`);

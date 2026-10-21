@@ -40,6 +40,7 @@ import { ArenaQuestion, ArenaUserStats, ArenaCollectible, ArenaRankingEntry, Stu
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { consumeCredit } from '../services/userService';
+import { serverTimestamp } from '../firebase';
 
 import { INITIAL_CARDS } from '../constants/arenaCards';
 
@@ -446,7 +447,8 @@ export const ArenaView: React.FC<ArenaViewProps> = ({ onExit }) => {
         streak: newStreak,
         maxStreak: Math.max(stats.maxStreak, newStreak),
         totalPoints: stats.totalPoints + pointsEarned,
-        levelPoints: newLevelPoints
+        levelPoints: newLevelPoints,
+        lastAnsweredAt: serverTimestamp() // lets the security rules limit answer frequency
       };
 
       await updateArenaUserStats(user!.uid, updates);

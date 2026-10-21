@@ -13,17 +13,19 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Admin = `admin` custom claim (scripts/ops/admin-claims.ts) or the legacy owner account
+    // with a verified email. The `role` field of users/{uid} is NOT trusted: any user could
+    // write it (audit C-03).
     function isAdmin() {
       return isAuthenticated() &&
         (
-          (request.auth.token.email.toLower() == "agusgestro17@gmail.com" && request.auth.token.email_verified == true) ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+          request.auth.token.get('admin', false) == true ||
+          (request.auth.token.get('email', '').lower() == "agusgestro17@gmail.com" && request.auth.token.get('email_verified', false) == true)
         );
     }
 
     function isDocOwner() {
-      return isAuthenticated() && 
+      return isAuthenticated() &&
              (
                (resource != null && 'userId' in resource.data && request.auth.uid == resource.data.userId) ||
                (resource != null && 'uid' in resource.data && request.auth.uid == resource.data.uid) ||
@@ -31,44 +33,132 @@ service cloud.firestore {
              );
     }
 
+    // The owner of a document cannot hand it over to another user.
+    function keepsUserId() {
+      return request.resource.data.get('userId', null) == resource.data.get('userId', null);
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function onlyChanges(keys) {
+      return changedKeys().hasOnly(keys);
+    }
+
+    // "YYYY-MM-DD" equal to the current UTC date (same format as new Date().toISOString()).
+    function isTodayUtc(value) {
+      let parts = value.split('-');
+      return value is string &&
+             value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+             int(parts[0]) == request.time.year() &&
+             int(parts[1]) == request.time.month() &&
+             int(parts[2]) == request.time.day();
+    }
+
+    // ---------------------------------------------------------------
+    // Groups
+    // ---------------------------------------------------------------
+    function groupPath(groupId) {
+      return /databases/$(database)/documents/groups/$(groupId);
+    }
+
+    function memberPath(groupId) {
+      return /databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid);
+    }
+
+    function isGroupCreator(groupId) {
+      return isAuthenticated() && exists(groupPath(groupId)) && get(groupPath(groupId)).data.createdBy == request.auth.uid;
+    }
+
+    // The creator always counts as member/admin: groups created before this fix have no
+    // admin membership document (the old rules rejected it).
     function isGroupMember(groupId) {
-      return isAuthenticated() && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+      return isAuthenticated() && (exists(memberPath(groupId)) || isGroupCreator(groupId));
     }
 
     function isGroupAdmin(groupId) {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin';
+      return isAuthenticated() &&
+        (isGroupCreator(groupId) || (exists(memberPath(groupId)) && get(memberPath(groupId)).data.role == 'admin'));
     }
 
-    function isValidUser(data) {
-      return (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
-             (!('email' in data) || (data.email is string && data.email.size() < 200)) &&
-             (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() < 1048576)) &&
-             (!('bannerURL' in data) || data.bannerURL == null || (data.bannerURL is string && data.bannerURL.size() < 1048576)) &&
-             (!('lastLogin' in data) || (data.lastLogin is timestamp || data.lastLogin is string || data.lastLogin == null)) &&
-             (!('createdAt' in data) || (data.createdAt is timestamp || data.createdAt is string || data.createdAt == null)) &&
-             (!('role' in data) || (data.role in ['admin', 'user', 'client'])) &&
-             (!('preferences' in data) || (
-               data.preferences is map &&
-               (!('theme' in data.preferences) || data.preferences.theme in ['light', 'dark']) &&
-               (!('language' in data.preferences) || data.preferences.language in ['es', 'en', 'pt']) &&
-               (!('notifications' in data.preferences) || data.preferences.notifications is bool) &&
-               (!('wallpaperUrl' in data.preferences) || data.preferences.wallpaperUrl == null || (data.preferences.wallpaperUrl is string && data.preferences.wallpaperUrl.size() < 2097152)) &&
-               (!('wallpaperType' in data.preferences) || data.preferences.wallpaperType in ['image', null])
-             )) &&
-             (!('subscription' in data) || (
-               data.subscription is map &&
-               (!('status' in data.subscription) || data.subscription.status in ['trial', 'active', 'expired', 'cancelled']) &&
-               (!('type' in data.subscription) || data.subscription.type in ['free', 'monthly', 'quarterly', 'annual'])
-             ));
+    // ---------------------------------------------------------------
+    // Credits, plans and roles (users/{uid})
+    // ---------------------------------------------------------------
+    // TRANSITIONAL (Phase 3A). The client still performs a few bounded credit transitions
+    // (consume 1, daily refill to 5, one free trial). When server-side credits are deployed
+    // together with the AI proxy (Phase 3B/4), this returns false and the client can no
+    // longer write any economic field. See docs/CREDITS_SERVER_MODEL.md.
+    function clientCreditTransitionsEnabled() {
+      return true; // CLIENT_CREDIT_TRANSITIONS
     }
 
+    function economicFields() {
+      return ['role', 'remainingCredits', 'subscriptionType', 'hasUsedFreeTrial', 'lastCreditReset', 'subscription'];
+    }
+
+    function credits(data) {
+      return data.get('remainingCredits', 0);
+    }
+
+    function validNewProfile(data) {
+      return (!('role' in data) || data.role == 'user') &&
+             (!('subscription' in data) || (data.subscription.status == 'trial' && data.subscription.type == 'free')) &&
+             (!('hasUsedFreeTrial' in data) || data.hasUsedFreeTrial == false) &&
+             !('lastCreditReset' in data) &&
+             (!('subscriptionType' in data) || (clientCreditTransitionsEnabled() && data.subscriptionType == 'Gratis')) &&
+             (!('remainingCredits' in data) ||
+               (clientCreditTransitionsEnabled() && data.remainingCredits is int && data.remainingCredits >= 0 && data.remainingCredits <= 15));
+    }
+
+    // AuthContext marks an expired 7-day trial. Only a downgrade, allowed in every mode.
+    function isTrialExpiry() {
+      return onlyChanges(['subscription']) &&
+             resource.data.subscription.status == 'trial' &&
+             request.resource.data.subscription.diff(resource.data.subscription).affectedKeys().hasOnly(['status']) &&
+             request.resource.data.subscription.status == 'expired';
+    }
+
+    // consumeCredit(): exactly one credit less.
+    function isCreditConsumption() {
+      return onlyChanges(['remainingCredits']) &&
+             credits(resource.data) is int && credits(resource.data) > 0 &&
+             request.resource.data.remainingCredits == credits(resource.data) - 1;
+    }
+
+    // getUserCredits(): once per UTC day, only when the balance is 0 or less, back to 5.
+    function isDailyRefill() {
+      return onlyChanges(['remainingCredits', 'lastCreditReset']) &&
+             credits(resource.data) <= 0 &&
+             request.resource.data.remainingCredits == 5 &&
+             isTodayUtc(request.resource.data.lastCreditReset) &&
+             resource.data.get('lastCreditReset', '') != request.resource.data.lastCreditReset;
+    }
+
+    // updateSubscription('prueba'): the free trial, once per account.
+    function isFreeTrialActivation() {
+      return changedKeys().hasOnly(['subscriptionType', 'remainingCredits', 'hasUsedFreeTrial']) &&
+             resource.data.get('hasUsedFreeTrial', false) != true &&
+             request.resource.data.hasUsedFreeTrial == true &&
+             request.resource.data.subscriptionType == '7 DÍAS GRATIS' &&
+             request.resource.data.remainingCredits == 15;
+    }
+
+    function isAllowedProfileUpdate() {
+      return !changedKeys().hasAny(economicFields()) ||
+             isTrialExpiry() ||
+             (clientCreditTransitionsEnabled() && (isCreditConsumption() || isDailyRefill() || isFreeTrialActivation()));
+    }
+
+    // ---------------------------------------------------------------
+    // Validators
+    // ---------------------------------------------------------------
     function isValidGroup(data) {
       return data.keys().hasAll(['name', 'courseId', 'createdBy', 'createdAt']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.courseId is string &&
-             data.createdBy == request.auth.uid;
+             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
+             (!('zoomUrl' in data) || (data.zoomUrl is string && data.zoomUrl.size() < 2048));
     }
 
     function isValidNote(data) {
@@ -153,14 +243,37 @@ service cloud.firestore {
              (!('currentPage' in data) || (data.currentPage is number && data.currentPage >= 0));
     }
 
-    function isValidRanking(data) {
-      return data.keys().hasAll(['userId', 'displayName', 'photoURL', 'points', 'level', 'updatedAt']) &&
-             data.userId == request.auth.uid &&
-             data.displayName is string && data.displayName.size() < 100 &&
-             data.photoURL is string &&
-             data.points is number &&
-             data.level in ['Inicial', 'Secundario', 'Universidad', 'Master'] &&
-             (data.updatedAt is timestamp || data.updatedAt is string);
+    // New feedback is always private; an admin publishes it after moderation.
+    function isValidNewFeedback(data) {
+      return data.userId == request.auth.uid &&
+             data.keys().hasOnly(['userId', 'userName', 'userPhoto', 'type', 'message', 'rating', 'createdAt', 'isPublic', 'publicCandidate']) &&
+             data.get('isPublic', false) == false &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 5000 &&
+             (!('type' in data) || (data.type is string && data.type.size() <= 50)) &&
+             (!('userName' in data) || (data.userName is string && data.userName.size() <= 100)) &&
+             (!('userPhoto' in data) || data.userPhoto == null || data.userPhoto is string) &&
+             (data.get('rating', null) == null || (data.rating is int && data.rating >= 1 && data.rating <= 5)) &&
+             (!('publicCandidate' in data) || data.publicCandidate is bool);
+    }
+
+    // ---------------------------------------------------------------
+    // Arena (client-side game: these rules enforce the scoring formula used by ArenaView,
+    // they cannot verify answers — see docs/FIRESTORE_SECURITY_3A.md)
+    // ---------------------------------------------------------------
+    function levels() {
+      return ['Inicial', 'Secundario', 'Universidad', 'Master'];
+    }
+
+    function levelSum(data) {
+      let lp = data.get('levelPoints', {});
+      return lp.get('Inicial', 0) + lp.get('Secundario', 0) + lp.get('Universidad', 0) + lp.get('Master', 0);
+    }
+
+    function noLevelDecreases(before, after) {
+      let a = before.get('levelPoints', {});
+      let b = after.get('levelPoints', {});
+      return b.get('Inicial', 0) >= a.get('Inicial', 0) && b.get('Secundario', 0) >= a.get('Secundario', 0) &&
+             b.get('Universidad', 0) >= a.get('Universidad', 0) && b.get('Master', 0) >= a.get('Master', 0);
     }
 
     function isValidArenaStats(data) {
@@ -174,48 +287,133 @@ service cloud.firestore {
              data.totalPoints is number;
     }
 
+    function isNewArenaStats(data) {
+      return isValidArenaStats(data) &&
+             data.maxLives == 3 && data.lives == 3 && data.streak == 0 && data.maxStreak == 0 &&
+             data.credits == 0 && data.totalPoints == 0 && levelSum(data) == 0 &&
+             (!('levelPoints' in data) || data.levelPoints.keys().hasOnly(levels()));
+    }
+
+    // Correct answer: streak + 1 and exactly 10 + 2 x streak points, at most one per second.
+    function isCorrectAnswer() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let earned = 10 + 2 * after.streak;
+      return onlyChanges(['streak', 'maxStreak', 'totalPoints', 'levelPoints', 'lastAnsweredAt']) &&
+             after.streak == before.streak + 1 &&
+             ((after.streak > before.maxStreak && after.maxStreak == after.streak) ||
+              (after.streak <= before.maxStreak && after.maxStreak == before.maxStreak)) &&
+             after.totalPoints == before.totalPoints + earned &&
+             after.levelPoints.keys().hasOnly(levels()) &&
+             levelSum(after) == levelSum(before) + earned &&
+             noLevelDecreases(before, after) &&
+             after.lastAnsweredAt == request.time &&
+             (!('lastAnsweredAt' in before) || request.time > before.lastAnsweredAt + duration.value(1, 's'));
+    }
+
+    // Wrong answer: one life less, streak back to 0 (cooldown only when lives reach 0).
+    function isWrongAnswer() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return onlyChanges(['lives', 'streak', 'lastLifeLostAt', 'cooldownUntil']) &&
+             before.lives > 0 && after.lives == before.lives - 1 && after.streak == 0 &&
+             (after.lives == 0 || !changedKeys().hasAny(['cooldownUntil']));
+    }
+
+    // Lives restored after the cooldown or by paying a credit (not verifiable here).
+    function isLivesRestore() {
+      return onlyChanges(['lives', 'cooldownUntil']) &&
+             resource.data.lives == 0 &&
+             request.resource.data.lives == resource.data.maxLives &&
+             request.resource.data.cooldownUntil == null;
+    }
+
+    // dropCollectible(): one more card id in the album.
+    function isCollectibleAdded() {
+      let before = resource.data.get('collectibles', []);
+      let after = request.resource.data.collectibles;
+      return onlyChanges(['collectibles']) && after is list &&
+             after.size() == before.size() + 1 && after.hasAll(before);
+    }
+
+    function isValidRanking(data) {
+      return data.keys().hasAll(['userId', 'displayName', 'photoURL', 'points', 'level', 'updatedAt']) &&
+             data.userId == request.auth.uid &&
+             data.displayName is string && data.displayName.size() < 100 &&
+             data.photoURL is string &&
+             data.points is number &&
+             data.level in levels() &&
+             (data.updatedAt is timestamp || data.updatedAt is string) &&
+             // The ranking must match the level points recorded in the user's own arena stats.
+             data.points == get(/databases/$(database)/documents/arena_stats/$(request.auth.uid)).data.get('levelPoints', {}).get(data.level, 0);
+    }
+
+    function isValidCollectible(data) {
+      return data.userId == request.auth.uid &&
+             data.keys().hasOnly(['userId', 'name', 'rarity', 'imageUrl', 'description', 'unlockedAt']) &&
+             data.rarity in ['Bronce', 'Plata', 'Oro', 'Fuego'] &&
+             data.name is string && data.name.size() <= 100 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 500)) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 2048));
+    }
+
+    function isValidArenaQuestion(data) {
+      return data.keys().hasAll(['question', 'options', 'correctAnswer', 'category', 'level']) &&
+             data.keys().size() <= 12 &&
+             data.question is string && data.question.size() <= 1000 &&
+             data.options is list && data.options.size() >= 2 && data.options.size() <= 6 &&
+             data.correctAnswer is int && data.correctAnswer >= 0 && data.correctAnswer < data.options.size() &&
+             (!('explanation' in data) || (data.explanation is string && data.explanation.size() <= 2000)) &&
+             data.category is string && data.category.size() <= 100 &&
+             data.level in levels();
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
 
     // User Profiles
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
-      
-      // Allow access to all subcollections for the user
-      match /{document=**} {
-        allow read, write: if isOwner(userId);
-      }
-      
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && validNewProfile(request.resource.data);
+      allow update: if isOwner(userId) && isAllowedProfileUpdate();
+      // Users can no longer delete their own profile (it reset credits and the free trial).
       allow delete: if isAdmin();
+
+      // Private subcollections of the user. `creditLedger` is written only by the server.
+      match /{subcollection}/{document=**} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && subcollection != 'creditLedger';
+      }
     }
 
     // Study Groups
     match /groups/{groupId} {
       // Allow any authenticated user to see groups to join
       allow read: if isAuthenticated();
-      
-      // Allow creating a group
-      allow create: if isAuthenticated() && isValidGroup(request.resource.data);
-      
-      // Only admin can update group info
-      allow update: if isGroupAdmin(groupId) && isValidGroup(request.resource.data);
-      
-      // Only admin can delete group
+
+      allow create: if isAuthenticated() && isValidGroup(request.resource.data) && request.resource.data.createdBy == request.auth.uid;
+
+      // Admins (creator or admin members) update the group; the creator cannot change.
+      allow update: if isGroupAdmin(groupId) && isValidGroup(request.resource.data) &&
+                       request.resource.data.createdBy == resource.data.createdBy;
+
       allow delete: if isGroupAdmin(groupId);
 
       // Group Members
       match /members/{userId} {
         allow read: if isGroupMember(groupId);
-        
-        // Allow joining a group (creating own membership)
-        allow create: if isOwner(userId) && 
+
+        // Join as member; the creator joins as admin of their own group.
+        allow create: if isOwner(userId) &&
                          request.resource.data.userId == request.auth.uid &&
-                         request.resource.data.role == 'member';
-                         
-        // Allow admin to promote members or members to leave
-        allow update: if isGroupAdmin(groupId) || (isOwner(userId) && request.resource.data.role == 'member');
-        
+                         (request.resource.data.role == 'member' ||
+                          (request.resource.data.role == 'admin' && isGroupCreator(groupId)));
+
+        // Admins promote members; members can only keep the 'member' role.
+        allow update: if (isGroupAdmin(groupId) && request.resource.data.role in ['member', 'admin']) ||
+                         (isOwner(userId) && request.resource.data.role == 'member');
+
         // Allow admin to remove members or members to leave
         allow delete: if isGroupAdmin(groupId) || isOwner(userId);
       }
@@ -233,22 +431,20 @@ service cloud.firestore {
         allow read: if isGroupMember(groupId);
         allow create: if isGroupMember(groupId) && isValidPlan(request.resource.data);
         allow update: if isGroupMember(groupId) && isValidPlan(request.resource.data);
-        allow delete: if isGroupMember(groupId) && isGroupAdmin(groupId);
+        allow delete: if isGroupAdmin(groupId);
       }
     }
 
-    // Feedback
+    // Feedback: private on creation, published only by an admin (moderation).
     match /feedback/{feedbackId} {
-      allow read: if isAdmin() || (resource != null && resource.data.isPublic == true);
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() ||
+                     (resource != null && resource.data.isPublic == true) ||
+                     (isAuthenticated() && resource != null && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidNewFeedback(request.resource.data);
       allow update, delete: if isAdmin();
     }
 
     // User Owned Data (Courses, Tasks, Activities, Exams, Chats)
-    function isOwnerOf(data) {
-      return isAuthenticated() && data.userId == request.auth.uid;
-    }
-
     match /user_courses/{courseId} {
       allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidCourse(request.resource.data);
@@ -257,7 +453,7 @@ service cloud.firestore {
 
       match /content/{contentId} {
         // Allow access if the user owns the document OR if they own the parent course
-        allow read, write: if isAdmin() || isDocOwner() || 
+        allow read, write: if isAdmin() || isDocOwner() ||
                              (isAuthenticated() && get(/databases/$(database)/documents/user_courses/$(courseId)).data.userId == request.auth.uid);
       }
     }
@@ -265,53 +461,61 @@ service cloud.firestore {
     match /tasks/{taskId} {
       allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidTask(request.resource.data);
-      allow update: if isAdmin() || (isDocOwner() && isValidTask(request.resource.data));
+      allow update: if isAdmin() || (isDocOwner() && keepsUserId() && isValidTask(request.resource.data));
       allow delete: if isAdmin() || isDocOwner();
     }
 
     match /activities/{activityId} {
       allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidActivity(request.resource.data);
-      allow update: if isAdmin() || (isDocOwner() && isValidActivity(request.resource.data));
+      allow update: if isAdmin() || (isDocOwner() && keepsUserId() && isValidActivity(request.resource.data));
       allow delete: if isAdmin() || isDocOwner();
     }
 
     match /exams/{examId} {
       allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidExam(request.resource.data);
-      allow update: if isAdmin() || (isDocOwner() && isValidExam(request.resource.data));
+      allow update: if isAdmin() || (isDocOwner() && keepsUserId() && isValidExam(request.resource.data));
       allow delete: if isAdmin() || isDocOwner();
     }
 
     match /chats/{chatId} {
       allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAdmin() || isDocOwner();
+      allow update: if isAdmin() || (isDocOwner() && keepsUserId());
       allow delete: if isAdmin() || isDocOwner();
 
+      // Messages belong to the owner of the parent chat (VoiceAssistant deletes the
+      // messages before the chat, so the parent still exists at that point).
+      function ownsChat() {
+        let chatPath = /databases/$(database)/documents/chats/$(chatId);
+        return isAuthenticated() && exists(chatPath) && get(chatPath).data.userId == request.auth.uid;
+      }
+
       match /messages/{messageId} {
-        allow read, write: if isAuthenticated();
+        allow read, delete: if isAdmin() || ownsChat();
+        allow create, update: if ownsChat() && request.resource.data.get('userId', request.auth.uid) == request.auth.uid;
       }
     }
 
     match /userFiles/{fileId} {
       allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidUserFile(request.resource.data);
-      allow update: if isAdmin() || (isDocOwner() && isValidUserFile(request.resource.data));
+      allow update: if isAdmin() || (isDocOwner() && keepsUserId() && isValidUserFile(request.resource.data));
       allow delete: if isAdmin() || isDocOwner();
     }
 
     match /bookProgress/{progressId} {
       allow read: if isAdmin() || isDocOwner() || (isAuthenticated() && resource == null);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidBookProgress(request.resource.data);
-      allow update: if isAdmin() || (isDocOwner() && isValidBookProgress(request.resource.data));
+      allow update: if isAdmin() || (isDocOwner() && keepsUserId() && isValidBookProgress(request.resource.data));
       allow delete: if isAdmin() || isDocOwner();
     }
 
-    // Global Stats
+    // Global Stats (AI kill switch, usage counters): written by the server or an admin only.
     match /stats/{statId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     // Public Library
@@ -323,25 +527,30 @@ service cloud.firestore {
     // Arena Sanctuary Rules
     match /arena_questions/{questionId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated(); // Allow users to save AI generated questions
+      allow create: if isAuthenticated() && isValidArenaQuestion(request.resource.data); // AI generated questions
       allow update, delete: if isAdmin();
     }
 
     match /arena_stats/{userId} {
       allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidArenaStats(request.resource.data);
+      allow create: if isOwner(userId) && isNewArenaStats(request.resource.data);
+      allow update: if isOwner(userId) &&
+                       request.resource.data.userId == resource.data.userId &&
+                       request.resource.data.maxLives == resource.data.maxLives &&
+                       request.resource.data.credits == resource.data.credits &&
+                       (isCorrectAnswer() || isWrongAnswer() || isLivesRestore() || isCollectibleAdded());
       allow delete: if isAdmin();
     }
 
     match /arena_collectibles/{collectibleId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidCollectible(request.resource.data);
       allow update, delete: if isAdmin();
     }
 
     match /arena_rankings/{rankingId} {
       allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() && 
+      allow create, update: if isAuthenticated() &&
                               rankingId == request.resource.data.level + "_" + request.auth.uid &&
                               isValidRanking(request.resource.data);
       allow delete: if isAdmin();

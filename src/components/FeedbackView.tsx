@@ -35,7 +35,8 @@ export const FeedbackView: React.FC = () => {
         message,
         rating: type === 'opinion' ? rating : null,
         createdAt: serverTimestamp(),
-        isPublic: type === 'opinion' && rating >= 4, // Automatically public if high rating
+        isPublic: false, // Published only after moderation by an admin
+        publicCandidate: type === 'opinion' && rating >= 4, // High rating: suggested for the landing page
       });
       
       toast.success('¡Gracias por tu feedback! Lo revisaremos pronto.');

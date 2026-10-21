@@ -25,11 +25,23 @@ const hostPort = (value: string) => {
   return { host, port: Number(port) };
 };
 
-export async function createTestEnv(): Promise<RulesTestEnvironment> {
+export const TRANSITIONAL_TOGGLE = "return true; // CLIENT_CREDIT_TRANSITIONS";
+
+/** Rules as they will be once server-side credits are live (Phase 3B/4): no client economic writes. */
+export function finalModeRules(): string {
+  const rules = fs.readFileSync(path.join(repoRoot, "firestore.rules"), "utf8");
+  if (!rules.includes(TRANSITIONAL_TOGGLE)) throw new Error("firestore.rules no contiene el interruptor CLIENT_CREDIT_TRANSITIONS");
+  return rules.replace(TRANSITIONAL_TOGGLE, "return false; // CLIENT_CREDIT_TRANSITIONS");
+}
+
+export async function createTestEnv(options: { projectId?: string; firestoreRules?: string } = {}): Promise<RulesTestEnvironment> {
   assertEmulatorOnly();
+  const projectId = options.projectId || PROJECT_ID;
+  if (!projectId.startsWith("demo-")) throw new Error("Solo proyectos demo-*");
   return initializeTestEnvironment({
-    projectId: PROJECT_ID,
-    firestore: { rules: fs.readFileSync(path.join(repoRoot, "firestore.rules"), "utf8"), ...hostPort(process.env.FIRESTORE_EMULATOR_HOST!) },
+    projectId,
+    // FIRESTORE_RULES_PATH lets the suite run against another rules file (e.g. the previous version) for comparison.
+    firestore: { rules: options.firestoreRules ?? fs.readFileSync(process.env.FIRESTORE_RULES_PATH || path.join(repoRoot, "firestore.rules"), "utf8"), ...hostPort(process.env.FIRESTORE_EMULATOR_HOST!) },
     storage: { rules: fs.readFileSync(path.join(repoRoot, "storage.rules"), "utf8"), ...hostPort(process.env.FIREBASE_STORAGE_EMULATOR_HOST!) },
   });
 }
