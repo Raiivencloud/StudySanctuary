@@ -26,6 +26,18 @@ REGLAS CRÍTICAS DE RESPUESTA:
 6. FÓRMULAS SIMPLES: Está TERMINANTEMENTE PROHIBIDO usar LaTeX o cualquier notación matemática compleja (no uses símbolos como $, \\, {}, ^, _, \frac, \sqrt). Escribí las fórmulas ÚNICAMENTE en texto plano amigable y legible para humanos (ejemplo: CO2 en lugar de subíndices, H2O, flechas simples ->, x para multiplicar, / para dividir). Esto aplica para RESÚMENES, TEORÍA y EXÁMENES. Asegúrate de que se lean bien en cualquier pantalla sin necesidad de renderizadores externos. Si detectas una fórmula compleja, simplifícala a texto descriptivo.`;
 
 /**
+ * TEMPORAL — clave de Gemini en el navegador.
+ * Cualquier valor de VITE_GEMINI_API_KEY / VITE_GOOGLE_API_KEY queda incluido en el
+ * bundle público. Se mantiene solo para no romper las funciones de IA hasta aprobar
+ * la migración al backend (ver docs/PROPOSAL_AI_BACKEND.md). No agregar claves
+ * literales ni variables de servidor (process.env.*) aquí.
+ */
+const getClientGeminiApiKey = (): string => {
+  const env = (import.meta as any).env || {};
+  return env.VITE_GEMINI_API_KEY || env.VITE_GOOGLE_API_KEY || '';
+};
+
+/**
  * Función maestra para llamar a Gemini con reintentos automáticos y modelo de respaldo
  */
 export const callGemini = async (prompt: string, config: any = {}, fileData?: any, retryCount = 0, modelIndex = 0): Promise<any> => {
@@ -61,13 +73,8 @@ export const callGemini = async (prompt: string, config: any = {}, fileData?: an
   console.log(`[AI] Intentando con ${currentModel} (Modelo ${modelIndex + 1}/${modelsToTry.length}, Reintento ${retryCount})`);
 
   try {
-    const apiKey = 
-      (import.meta as any).env?.VITE_GEMINI_API_KEY || 
-      (import.meta as any).env?.VITE_GOOGLE_API_KEY ||
-      process.env.GEMINI_API_KEY || 
-      process.env.GOOGLE_API_KEY || 
-     
-    
+    const apiKey = getClientGeminiApiKey();
+
     if (!apiKey || apiKey.length < 10) {
       throw new Error("API Key no válida o no configurada.");
     }
@@ -235,12 +242,7 @@ export const generatePodcastScript = async (userId: string, topic: string, langu
 
 export const generatePodcastAudio = async (userId: string, script: string) => {
   try {
-    const apiKey = 
-      (import.meta as any).env?.VITE_GEMINI_API_KEY || 
-      (import.meta as any).env?.VITE_GOOGLE_API_KEY ||
-      process.env.GEMINI_API_KEY || 
-      process.env.GOOGLE_API_KEY || 
-      "AIzaSyARJipjuIJ7dguggYV-IdYJIrpp3bnpjZI";
+    const apiKey = getClientGeminiApiKey();
     
     if (!apiKey) return null;
 

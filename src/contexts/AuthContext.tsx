@@ -9,8 +9,7 @@ import {
   setPersistence,
   browserLocalPersistence
 } from 'firebase/auth';
-import { auth, db, googleProvider, appleProvider, logout as firebaseLogout, handleFirestoreError, OperationType } from '../firebase';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { auth, db, googleProvider, appleProvider, logout as firebaseLogout, handleFirestoreError, OperationType, firebaseConfig } from '../firebase';
 import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { UserProfile } from '../types';

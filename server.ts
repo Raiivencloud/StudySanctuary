@@ -15,27 +15,35 @@ import multer from "multer";
 import compression from "compression";
 import "dotenv/config";
 import admin from "firebase-admin";
-import fs from "fs";
+import { getFirestore } from "firebase-admin/firestore";
 import { MercadoPagoConfig, Preference } from 'mercadopago';
+import { loadServerConfig, ConfigError, type ServerConfig } from "./server/config";
+import { createAiProxyRouter } from "./server/ai/geminiProxy";
 
-// Load Firebase Config
-const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-console.log(`[Server] Loading config from: ${configPath}`);
-if (!fs.existsSync(configPath)) {
-  console.error(`[Server] Config file not found at: ${configPath}`);
-  process.exit(1);
+// Load configuration from environment variables (see .env.example)
+let serverConfig: ServerConfig;
+try {
+  serverConfig = loadServerConfig(process.env);
+} catch (error) {
+  if (error instanceof ConfigError) {
+    console.error(`[Server] ${error.message}`);
+    process.exit(1);
+  }
+  throw error;
 }
-const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+if (serverConfig.session.ephemeral) {
+  console.warn("[Server] SESSION_SECRET no definida: usando un secreto aleatorio temporal (solo desarrollo). Las sesiones se invalidan en cada reinicio.");
+}
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
   try {
     // Try initializing with config first
     admin.initializeApp({
-      projectId: firebaseConfig.projectId,
-      storageBucket: firebaseConfig.storageBucket
+      projectId: serverConfig.firebase.projectId,
+      storageBucket: serverConfig.firebase.storageBucket
     });
-    console.log(`[Server] Firebase Admin initialized with project: ${firebaseConfig.projectId}`);
+    console.log(`[Server] Firebase Admin initialized with project: ${serverConfig.firebase.projectId}`);
   } catch (initError) {
     console.warn("[Server] Failed to initialize Firebase Admin with config, trying default:", initError);
     try {
@@ -47,7 +55,10 @@ if (!admin.apps.length) {
     }
   }
 }
-const dbAdmin = admin.firestore();
+// Without FIREBASE_DATABASE_ID the Admin SDK keeps using the "(default)" database (previous behavior).
+const dbAdmin = serverConfig.firebase.databaseId
+  ? getFirestore(admin.app(), serverConfig.firebase.databaseId)
+  : admin.firestore();
 const storageAdmin = admin.storage();
 
 // Initialize Mercado Pago
@@ -85,9 +96,18 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.use(compression()); // Enable Gzip/Brotli compression
+
+  // Server-side Gemini proxy (disabled unless AI_PROXY_ENABLED=true). Mounted before the
+  // global JSON parser because it needs a larger body limit for multimodal requests.
+  app.use("/api/ai", createAiProxyRouter({
+    enabled: serverConfig.ai.proxyEnabled,
+    apiKey: serverConfig.ai.geminiApiKey,
+    verifyIdToken: (token) => admin.auth().verifyIdToken(token),
+  }));
+
   app.use(express.json());
   app.use(cookieParser());
-  app.use(compression()); // Enable Gzip/Brotli compression
   
   // Health check endpoint
   app.get("/api/health", (req, res) => {
@@ -292,7 +312,7 @@ async function startServer() {
   }
 
   app.use(session({
-    secret: "study-sanctuary-secret",
+    secret: serverConfig.session.secret,
     resave: false,
     saveUninitialized: true,
     cookie: {
@@ -306,10 +326,10 @@ async function startServer() {
   // Firebase Storage CORS fix
   app.get("/api/admin/fix-cors", async (req, res) => {
     const bucketNames = [
-      firebaseConfig.storageBucket,
-      `${firebaseConfig.projectId}.firebasestorage.app`,
-      `${firebaseConfig.projectId}.appspot.com`,
-      firebaseConfig.projectId,
+      serverConfig.firebase.storageBucket,
+      `${serverConfig.firebase.projectId}.firebasestorage.app`,
+      `${serverConfig.firebase.projectId}.appspot.com`,
+      serverConfig.firebase.projectId,
       'ai-studio-applet-webapp-6cc37.firebasestorage.app',
       'ai-studio-applet-webapp-6cc37.appspot.com'
     ].filter(Boolean);
@@ -355,10 +375,10 @@ async function startServer() {
 
     // Try multiple bucket name variations if the first one fails
     const bucketNames = [
-      firebaseConfig.storageBucket,
-      `${firebaseConfig.projectId}.firebasestorage.app`,
-      `${firebaseConfig.projectId}.appspot.com`,
-      firebaseConfig.projectId,
+      serverConfig.firebase.storageBucket,
+      `${serverConfig.firebase.projectId}.firebasestorage.app`,
+      `${serverConfig.firebase.projectId}.appspot.com`,
+      serverConfig.firebase.projectId,
       'ai-studio-applet-webapp-6cc37.firebasestorage.app',
       'ai-studio-applet-webapp-6cc37.appspot.com'
     ].filter(Boolean);
@@ -388,7 +408,7 @@ async function startServer() {
         } catch (signedUrlError: any) {
           if (signedUrlError.message?.includes('IAM Service Account Credentials API') || signedUrlError.code === 403) {
             console.error(`\n[Server] CRITICAL: IAM Service Account Credentials API is not enabled.`);
-            console.error(`[Server] ACTION REQUIRED: Visit this link to enable it: https://console.developers.google.com/apis/api/iamcredentials.googleapis.com/overview?project=${firebaseConfig.projectId}`);
+            console.error(`[Server] ACTION REQUIRED: Visit this link to enable it: https://console.developers.google.com/apis/api/iamcredentials.googleapis.com/overview?project=${serverConfig.firebase.projectId}`);
             console.error(`[Server] Fallback: Making file public until API is enabled.\n`);
           }
           console.warn(`[Server] Failed to get signed URL for bucket ${bucketName}, making public instead:`, signedUrlError.message);
@@ -927,9 +947,9 @@ async function startServer() {
 
     // Attempt to fix CORS on startup using multiple bucket variations
     const bucketNames = [
-      firebaseConfig.storageBucket,
-      `${firebaseConfig.projectId}.appspot.com`,
-      firebaseConfig.projectId
+      serverConfig.firebase.storageBucket,
+      `${serverConfig.firebase.projectId}.appspot.com`,
+      serverConfig.firebase.projectId
     ].filter(Boolean);
 
     for (const bucketName of bucketNames) {

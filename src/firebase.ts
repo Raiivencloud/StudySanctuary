@@ -3,11 +3,21 @@ import { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut, o
 import { getFirestore, doc, collection, query, where, onSnapshot, setDoc, updateDoc, deleteDoc, addDoc, getDoc, getDocs, Timestamp, serverTimestamp, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
-// Import the Firebase configuration
-import firebaseConfig from '../firebase-applet-config.json';
+import { readFirebaseWebConfig } from './config/firebaseWebConfig';
+
+// Firebase configuration from VITE_FIREBASE_* env vars (throws MissingConfigError if incomplete)
+export const firebaseConfig = readFirebaseWebConfig((import.meta as any).env || {});
 
 // Initialize Firebase SDK
-const app = initializeApp(firebaseConfig);
+const app = initializeApp({
+  apiKey: firebaseConfig.apiKey,
+  authDomain: firebaseConfig.authDomain,
+  projectId: firebaseConfig.projectId,
+  storageBucket: firebaseConfig.storageBucket,
+  appId: firebaseConfig.appId,
+  messagingSenderId: firebaseConfig.messagingSenderId,
+  measurementId: firebaseConfig.measurementId,
+});
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const storage = getStorage(app, firebaseConfig.storageBucket);

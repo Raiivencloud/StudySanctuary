@@ -4,13 +4,18 @@ import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
+  // Only VITE_* variables are exposed to the client bundle. Never inject server
+  // secrets (GEMINI_API_KEY, SESSION_SECRET, MERCADOPAGO_ACCESS_TOKEN, ...) via `define`.
+  const env = loadEnv(mode, '.', 'VITE_');
+  if (env.VITE_GEMINI_API_KEY || env.VITE_GOOGLE_API_KEY) {
+    console.warn(
+      '\n[security] VITE_GEMINI_API_KEY / VITE_GOOGLE_API_KEY está definida: la clave quedará PÚBLICA en el bundle.\n' +
+      '[security] Uso temporal hasta migrar la IA al backend (docs/PROPOSAL_AI_BACKEND.md).\n'
+    );
+  }
   return {
     plugins: [react(), tailwindcss()],
     base: '',
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
     build: {
       chunkSizeWarningLimit: 2000,
       rollupOptions: {

@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local Firebase config / credentials (configuration now comes from env vars)
+firebase-applet-config.json
+*service-account*.json

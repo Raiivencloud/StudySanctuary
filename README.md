@@ -26,3 +26,16 @@ src/
 ├── hooks/          # Reusable Business Logic & UI Helpers
 ├── lib/            # Firebase & SDK Configurations
 └── services/       # Core AI Logic (Gemini API Integrations)
+
+## ⚙️ Configuration & local checks
+
+Configuration comes from environment variables (no `firebase-applet-config.json`). Copy `.env.example` to `.env` and see [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+
+```bash
+npm ci
+npm run verify:config   # validates client/server config without printing values
+npm run dev             # http://localhost:3000
+npm run verify          # typecheck + unit tests + secret scan + bundle tests
+```
+
+Credentials that must be revoked or rotated: [`docs/SECURITY_CREDENTIALS.md`](docs/SECURITY_CREDENTIALS.md).

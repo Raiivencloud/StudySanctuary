@@ -5,11 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && npx esbuild server.ts --bundle --platform=node --outfile=dist/server.cjs --packages=external && cp firebase-applet-config.json dist/ && cp package.json dist/",
+    "build": "vite build && npx esbuild server.ts --bundle --platform=node --outfile=dist/server.cjs --packages=external && cp package.json dist/",
     "start": "NODE_ENV=production node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "node --import tsx --test tests/unit/*.test.ts",
+    "test:build": "node --import tsx --test tests/bundle/*.test.ts",
+    "scan:source": "tsx scripts/scan-secrets.ts --tracked",
+    "scan:bundle": "tsx scripts/scan-secrets.ts dist",
+    "verify:config": "tsx scripts/verify-config.ts",
+    "verify": "npm run lint && npm test && npm run scan:source && npm run test:build"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
