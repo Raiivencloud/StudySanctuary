@@ -1,4 +1,6 @@
-# Propuesta: migrar las llamadas a Gemini al backend (PENDIENTE DE APROBACIÓN)
+# Propuesta: migrar las llamadas a Gemini al backend
+
+> **Estado: IMPLEMENTADA en la Fase 4** (rama `phase4-ai-backend`, solo local y en desarrollo). Ver [`PHASE4_REPORT.md`](./PHASE4_REPORT.md). Este documento queda como registro de la propuesta original.
 
 ## Estado actual (después de la Fase 1)
 

@@ -66,6 +66,10 @@ test("server-only secrets never reach the client bundle", { timeout: 300_000 }, 
       assert.ok(!bundle.includes("SENTINEL_"), "un valor de servidor apareció en el bundle");
     }
     assert.deepEqual(scanDirectory(outDir, { env }), []);
+
+    // Phase 4: the browser bundle has no Gemini SDK and no Google AI endpoint.
+    assert.ok(!bundle.includes("generativelanguage.googleapis.com"), "Gemini endpoint found in the bundle");
+    assert.ok(!bundle.includes("@google/genai"), "Gemini SDK found in the bundle");
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true });
   }

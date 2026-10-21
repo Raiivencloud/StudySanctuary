@@ -3,7 +3,8 @@ import { Mic, MicOff, Volume2, VolumeX, X, Loader2, BrainCircuit, RotateCcw, Plu
 import { motion, AnimatePresence } from 'framer-motion';
 import { Modality, getAI, handleAIError } from '../services/geminiService';
 import { toast } from 'sonner';
-import { getUserCredits, consumeCredit } from '../services/userService';
+import { getUserCredits, refreshCredits } from '../services/userService';
+import { newAiAction } from '../services/aiClient';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
@@ -78,8 +79,12 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ isOpen, onClose 
       } as ChatSession));
       setSessions(loadedSessions);
       
-      if (loadedSessions.length > 0 && !currentSessionId) {
-        setCurrentSessionId(loadedSessions[0].id);
+      // Only auto-select a chat already saved on the server: a just-created chat (pending
+      // local write) is selected by the send handler once it exists, otherwise the
+      // messages listener would start before the security rules can see the chat.
+      const firstSaved = snapshot.docs.find(d => !d.metadata.hasPendingWrites);
+      if (firstSaved && !currentSessionId) {
+        setCurrentSessionId(firstSaved.id);
       }
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'chats'));
 
@@ -285,7 +290,7 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ isOpen, onClose 
         });
       }
 
-      const ai = getAI();
+      const ai = getAI(newAiAction('voice_assistant'));
       const textResult = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ parts: [{ text: text }] }],
@@ -298,7 +303,7 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ isOpen, onClose 
       setResponse(responseText);
       
       // Consumir crédito tras respuesta exitosa
-      await consumeCredit(auth.currentUser.uid);
+      await refreshCredits(auth.currentUser.uid);
       
       // Save AI response
       await addDoc(collection(db, 'chats', sessionId, 'messages'), {

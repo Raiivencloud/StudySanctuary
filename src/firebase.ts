@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, doc, collection, query, where, onSnapshot, setDoc, updateDoc, deleteDoc, addDoc, getDoc, getDocs, Timestamp, serverTimestamp, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { getAuth, connectAuthEmulator, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator, doc, collection, query, where, onSnapshot, setDoc, updateDoc, deleteDoc, addDoc, getDoc, getDocs, Timestamp, serverTimestamp, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
+import { getStorage, connectStorageEmulator, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 import { readFirebaseWebConfig } from './config/firebaseWebConfig';
 
@@ -21,6 +21,15 @@ const app = initializeApp({
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const storage = getStorage(app, firebaseConfig.storageBucket);
+
+// Local development only (npm run dev:emulators): Auth, Firestore and Storage emulators.
+// Never set VITE_USE_FIREBASE_EMULATORS in a production build.
+if ((import.meta as any).env?.VITE_USE_FIREBASE_EMULATORS === 'true') {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8085);
+  connectStorageEmulator(storage, '127.0.0.1', 9199);
+  console.warn('[Firebase] Usando los emuladores locales (modo desarrollo).');
+}
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: 'select_account'

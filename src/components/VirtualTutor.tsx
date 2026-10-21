@@ -3,7 +3,8 @@ import { BrainCircuit, Send, Loader2, User, RefreshCw, GraduationCap, Lightbulb,
 import { getAI, Modality, handleAIError, STUDY_SANCTUARY_PROMPT } from '../services/geminiService';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getUserCredits, consumeCredit } from '../services/userService';
+import { getUserCredits, refreshCredits } from '../services/userService';
+import { newAiAction } from '../services/aiClient';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { db, handleFirestoreError, OperationType } from '../firebase';
@@ -77,8 +78,12 @@ export default function VirtualTutor() {
       } as ChatSession));
       setSessions(loadedSessions);
       
-      if (loadedSessions.length > 0 && !currentSessionId) {
-        setCurrentSessionId(loadedSessions[0].id);
+      // Only auto-select a chat already saved on the server: a just-created chat (pending
+      // local write) is selected by the send handler once it exists, otherwise the
+      // messages listener would start before the security rules can see the chat.
+      const firstSaved = snapshot.docs.find(d => !d.metadata.hasPendingWrites);
+      if (firstSaved && !currentSessionId) {
+        setCurrentSessionId(firstSaved.id);
       }
     }, (err) => console.error("Firestore Error (chats):", err));
 
@@ -223,7 +228,7 @@ export default function VirtualTutor() {
         return;
       }
 
-      const ai = getAI();
+      const ai = getAI(newAiAction('virtual_tutor'));
       const history = messages.filter(m => m.id !== 'welcome').map(m => ({
         role: m.role === 'user' ? 'user' : 'model',
         parts: [{ text: m.content }]
@@ -244,7 +249,7 @@ export default function VirtualTutor() {
       const tutorResponse = result.text || 'Lo siento, tuve un problema al procesar tu respuesta.';
 
       // Consumir crédito tras respuesta exitosa
-      await consumeCredit(user.uid);
+      await refreshCredits(user.uid);
 
       try {
         await addDoc(collection(db, 'chats', sessionId, 'messages'), {

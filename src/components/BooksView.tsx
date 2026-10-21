@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getAI, handleAIError } from '../services/geminiService';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { getUserCredits, consumeCredit } from '../services/userService';
+import { getUserCredits, refreshCredits } from '../services/userService';
+import { newAiAction } from '../services/aiClient';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -205,7 +206,7 @@ export const BooksView: React.FC = () => {
         }
       }
 
-      const ai = getAI();
+      const ai = getAI(newAiAction('books'));
       const result = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ parts: [{ text: `Proporciona el texto ÍNTEGRO, EXTENSO y COMPLETO del capítulo ${chapterIndex + 1} del libro "${book.title}" de ${book.author}. 
@@ -224,7 +225,7 @@ export const BooksView: React.FC = () => {
       
       // Consumir crédito tras respuesta exitosa
       if (user) {
-        await consumeCredit(user.uid);
+        await refreshCredits(user.uid);
       }
       
       setReadingContent(updatedContent);
@@ -261,7 +262,7 @@ export const BooksView: React.FC = () => {
         }
       }
 
-      const ai = getAI();
+      const ai = getAI(newAiAction('books'));
       const result = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ parts: [{ text: `Genera una guía de estudio completa para el libro "${book.title}" de ${book.author}. 
@@ -279,7 +280,7 @@ export const BooksView: React.FC = () => {
       
       // Consumir crédito tras respuesta exitosa
       if (user) {
-        await consumeCredit(user.uid);
+        await refreshCredits(user.uid);
       }
     } catch (error) {
       console.error("Guide error:", error);

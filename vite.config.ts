@@ -9,8 +9,8 @@ export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', 'VITE_');
   if (env.VITE_GEMINI_API_KEY || env.VITE_GOOGLE_API_KEY) {
     console.warn(
-      '\n[security] VITE_GEMINI_API_KEY / VITE_GOOGLE_API_KEY está definida: la clave quedará PÚBLICA en el bundle.\n' +
-      '[security] Uso temporal hasta migrar la IA al backend (docs/PROPOSAL_AI_BACKEND.md).\n'
+      '\n[security] VITE_GEMINI_API_KEY / VITE_GOOGLE_API_KEY ya no se usa: la IA pasa por el servidor (GEMINI_API_KEY).\n' +
+      '[security] Eliminala de tu .env: cualquier variable VITE_* queda pública.\n'
     );
   }
   return {

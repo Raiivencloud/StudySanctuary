@@ -1,12 +1,15 @@
-import { GoogleGenAI } from "@google/genai";
+import { requestGeneration, newAiAction, type AiBilling } from './aiClient';
 import { toast } from 'sonner';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { clearAppCache } from '../lib/cacheUtils';
 
 /**
- * CONFIGURACIÓN DE GEMINI - PRODUCCIÓN CLOUD RUN
- * Este archivo utiliza el SDK oficial de Google Generative AI.
- * Se conecta directamente a la API de Google sin intermediarios ni proxies.
+ * CONFIGURACIÓN DE IA (Fase 4)
+ * El navegador NO llama a Gemini ni tiene claves: todas las solicitudes pasan por
+ * /api/ai/generate (server/ai/aiRouter.ts), que valida la identidad, los límites y los
+ * créditos, y aplica los reintentos y modelos de respaldo.
+ * El último parámetro opcional `billing` identifica la acción del usuario que se cobra
+ * (ver src/shared/aiFeatures.ts). Sin él, la llamada es una herramienta incluida (sin costo).
  */
 
 /**
@@ -25,186 +28,101 @@ REGLAS CRÍTICAS DE RESPUESTA:
 5. FORMATO LIMPIO: No menciones que eres una IA ni hables de tus limitaciones. Tu respuesta debe parecer un apunte de estudio profesional listo para imprimir o leer.
 6. FÓRMULAS SIMPLES: Está TERMINANTEMENTE PROHIBIDO usar LaTeX o cualquier notación matemática compleja (no uses símbolos como $, \\, {}, ^, _, \frac, \sqrt). Escribí las fórmulas ÚNICAMENTE en texto plano amigable y legible para humanos (ejemplo: CO2 en lugar de subíndices, H2O, flechas simples ->, x para multiplicar, / para dividir). Esto aplica para RESÚMENES, TEORÍA y EXÁMENES. Asegúrate de que se lean bien en cualquier pantalla sin necesidad de renderizadores externos. Si detectas una fórmula compleja, simplifícala a texto descriptivo.`;
 
+const JSON_SYSTEM_INSTRUCTION = "Eres un asistente experto en extracción de datos. Responde ÚNICAMENTE en formato JSON válido según el esquema solicitado. No incluyas texto adicional, saludos ni explicaciones.";
+
+const isAudioConfig = (config: any) => Array.isArray(config?.responseModalities) && config.responseModalities.includes('AUDIO');
+
 /**
- * TEMPORAL — clave de Gemini en el navegador.
- * Cualquier valor de VITE_GEMINI_API_KEY / VITE_GOOGLE_API_KEY queda incluido en el
- * bundle público. Se mantiene solo para no romper las funciones de IA hasta aprobar
- * la migración al backend (ver docs/PROPOSAL_AI_BACKEND.md). No agregar claves
- * literales ni variables de servidor (process.env.*) aquí.
+ * Arma la solicitud (mismo prompt e instrucciones que antes) y la envía al servidor.
+ * `history` permite conversaciones (tutor virtual).
  */
-const getClientGeminiApiKey = (): string => {
-  const env = (import.meta as any).env || {};
-  return env.VITE_GEMINI_API_KEY || env.VITE_GOOGLE_API_KEY || '';
+const runGeneration = async (prompt: string, config: any = {}, fileData?: any, billing?: AiBilling, history: any[] = []): Promise<any> => {
+  const parts: any[] = [{ text: prompt }];
+
+  if (fileData?.data && fileData?.mimeType) {
+    parts.push({
+      inlineData: {
+        data: fileData.data,
+        mimeType: fileData.mimeType
+      }
+    });
+    // Modo Multimodal: Analiza texto e imágenes del binario
+    parts[0].text = `Analiza este documento íntegramente (texto e imágenes) y realiza la tarea solicitada basándote solo en este contenido:\n\nTAREA: ${prompt}`;
+  } else if (fileData?.text) {
+    // Si tenemos texto extraído (Word/TXT), lo inyectamos directamente
+    parts[0].text = `Analiza este documento íntegramente (texto) y realiza la tarea solicitada basándote solo en este contenido:\n\nCONTENIDO DEL DOCUMENTO:\n${fileData.text}\n\n---\n\nTAREA: ${prompt}`;
+  }
+
+  const { model, ...apiConfig } = config || {};
+
+  // Determinar la instrucción del sistema (las solicitudes de voz no la llevan)
+  if (!isAudioConfig(apiConfig)) {
+    apiConfig.systemInstruction = apiConfig.systemInstruction || STUDY_SANCTUARY_PROMPT;
+    // Si la respuesta es JSON, no forzamos el formato de apuntes que rompería el JSON
+    if (apiConfig.responseMimeType === "application/json") {
+      apiConfig.systemInstruction = JSON_SYSTEM_INSTRUCTION;
+    }
+  }
+
+  const response = await requestGeneration({
+    model,
+    contents: [...history, { role: "user", parts }],
+    config: apiConfig,
+    billing,
+  });
+
+  // Si es una petición de audio (TTS), devolvemos el objeto completo para que el componente lo maneje
+  if (isAudioConfig(apiConfig)) {
+    return response;
+  }
+
+  if (!response.text) {
+    throw new Error("Respuesta vacía de la IA.");
+  }
+
+  return response.text;
 };
 
 /**
- * Función maestra para llamar a Gemini con reintentos automáticos y modelo de respaldo
+ * Función maestra para llamar a la IA. Los reintentos y modelos de respaldo ahora los
+ * aplica el servidor.
  */
-export const callGemini = async (prompt: string, config: any = {}, fileData?: any, retryCount = 0, modelIndex = 0): Promise<any> => {
-  // Lista de modelos garantizados por orden de estabilidad y compatibilidad
-  const FALLBACK_MODELS = [
-    "gemini-3-flash-preview", 
-    "gemini-3-flash-preview-search",
-    "gemini-2.0-flash", 
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash", 
-    "gemini-2.0-flash-lite-preview-02-05",
-    "gemini-1.5-flash-8b-latest",
-    "gemini-1.5-pro-latest"
-  ];
-  
-  // Construimos la lista de modelos a intentar para esta petición específica
-  const requestedModel = config?.model;
-  const modelsToTry = [
-    ...(requestedModel ? [requestedModel] : []),
-    ...FALLBACK_MODELS
-  ].filter((m, i, self) => self.indexOf(m) === i); // Eliminar duplicados
-
-  const currentModel = modelsToTry[modelIndex];
-  
-  // Si ya no quedan modelos por intentar, lanzamos el último error
-  if (!currentModel) {
-    throw new Error("No se pudo conectar con ningún modelo de IA disponible.");
-  }
-
-  const MAX_RETRIES_PER_MODEL = 2;
-  const INITIAL_RETRY_DELAY = 1500;
-
-  console.log(`[AI] Intentando con ${currentModel} (Modelo ${modelIndex + 1}/${modelsToTry.length}, Reintento ${retryCount})`);
-
-  try {
-    const apiKey = getClientGeminiApiKey();
-
-    if (!apiKey || apiKey.length < 10) {
-      throw new Error("API Key no válida o no configurada.");
-    }
-
-    const genAI = new GoogleGenAI({ apiKey });
-
-    const parts: any[] = [{ text: prompt }];
-    
-    if (fileData?.data && fileData?.mimeType) {
-      parts.push({
-        inlineData: {
-          data: fileData.data,
-          mimeType: fileData.mimeType
-        }
-      });
-      // Modo Multimodal: Analiza texto e imágenes del binario
-      parts[0].text = `Analiza este documento íntegramente (texto e imágenes) y realiza la tarea solicitada basándote solo en este contenido:\n\nTAREA: ${prompt}`;
-    } else if (fileData?.text) {
-      // Si tenemos texto extraído (Word/TXT), lo inyectamos directamente
-      parts[0].text = `Analiza este documento íntegramente (texto) y realiza la tarea solicitada basándote solo en este contenido:\n\nCONTENIDO DEL DOCUMENTO:\n${fileData.text}\n\n---\n\nTAREA: ${prompt}`;
-    }
-
-    // Limpiamos el config para la API
-    const { model: _, ...apiConfig } = config;
-
-    // Determinar la instrucción del sistema
-    let systemInstruction = apiConfig.systemInstruction || STUDY_SANCTUARY_PROMPT;
-    
-    // Si la respuesta es JSON, no forzamos el formato de apuntes que rompería el JSON
-    if (apiConfig.responseMimeType === "application/json") {
-      systemInstruction = "Eres un asistente experto en extracción de datos. Responde ÚNICAMENTE en formato JSON válido según el esquema solicitado. No incluyas texto adicional, saludos ni explicaciones.";
-    }
-
-    const response = await genAI.models.generateContent({ 
-      model: currentModel,
-      contents: [{ role: "user", parts }],
-      config: {
-        systemInstruction,
-        ...apiConfig
-      }
-    });
-
-    // Si es una petición de audio (TTS), devolvemos el objeto completo para que el componente lo maneje
-    if (config?.responseModalities?.includes('AUDIO')) {
-      return response;
-    }
-
-    if (!response.text) {
-      throw new Error("Respuesta vacía de la IA.");
-    }
-
-    return response.text;
-  } catch (error: any) {
-    // Extraer código de error de diversas estructuras posibles
-    const errorCode = error.code || error.error?.code || error.status || (error.message?.includes('404') ? 404 : null);
-    const errorMessage = (error.message || error.error?.message || "").toLowerCase();
-
-    console.error(`[AI Error] ${currentModel}:`, errorMessage);
-
-    // 404: El modelo no existe o no está disponible para esta clave
-    const isNotFound = errorCode === 404 || errorCode === 'NOT_FOUND' || 
-                       errorMessage.includes('not found') || 
-                       errorMessage.includes('requested entity');
-    
-    // 400: Clave inválida o parámetros incorrectos para ese modelo
-    const isBadRequest = errorCode === 400 || errorMessage.includes('api key not valid') || errorMessage.includes('invalid');
-
-    if (isNotFound || isBadRequest) {
-      if (modelIndex < modelsToTry.length - 1) {
-        console.warn(`[AI] Modelo ${currentModel} falló. Saltando al siguiente respaldo...`);
-        return callGemini(prompt, config, fileData, 0, modelIndex + 1);
-      }
-    }
-
-    // Errores de saturación o cuota (429, 503)
-    const isRetryable = 
-      errorCode === 503 || errorCode === 429 || errorCode === 'UNAVAILABLE' || errorCode === 'RESOURCE_EXHAUSTED' ||
-      errorMessage.includes('high demand') || errorMessage.includes('temporary') || 
-      errorMessage.includes('unavailable') || errorMessage.includes('overloaded');
-    
-    if (isRetryable) {
-      if (retryCount >= MAX_RETRIES_PER_MODEL) {
-        if (modelIndex < modelsToTry.length - 1) {
-          console.warn(`[AI] Agotados reintentos para ${currentModel}. Probando siguiente modelo...`);
-          return callGemini(prompt, config, fileData, 0, modelIndex + 1);
-        }
-      } else {
-        const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
-        console.warn(`[AI] Reintentando ${currentModel} en ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return callGemini(prompt, config, fileData, retryCount + 1, modelIndex);
-      }
-    }
-
-    // Si llegamos aquí y no es un error que queramos reintentar con otro modelo, lanzamos el error original
-    throw error;
-  }
+export const callGemini = async (prompt: string, config: any = {}, fileData?: any, billing?: AiBilling): Promise<any> => {
+  console.log(`[AI] Solicitud${config?.model ? ` (${config.model})` : ''}${billing ? ` · ${billing.feature}` : ''}`);
+  return runGeneration(prompt, config, fileData, billing);
 };
 
 // --- FUNCIONES DE GENERACIÓN ---
 
-export const generateAdaptivePlan = async (userId: string, course: string, progress: number, language: string, studyLevel?: any, fileData?: any) => {
+export const generateAdaptivePlan = async (userId: string, course: string, progress: number, language: string, studyLevel?: any, fileData?: any, billing?: AiBilling) => {
   const prompt = `Genera un plan de estudio para el curso "${course}" con progreso ${progress}%. Nivel: ${studyLevel}. Idioma: ${language}.`;
-  const result = await callGemini(prompt, { responseMimeType: "application/json" }, fileData);
+  const result = await callGemini(prompt, { responseMimeType: "application/json" }, fileData, billing);
   return typeof result === 'string' ? extractJSON(result) : result;
 };
 
-export const generateSummary = async (userId: string, topic: string, language: string = "es", studyLevel: string = "medio", fileData?: any) => {
+export const generateSummary = async (userId: string, topic: string, language: string = "es", studyLevel: string = "medio", fileData?: any, billing?: AiBilling) => {
   const prompt = `Resume de forma clara: ${topic}. Nivel: ${studyLevel}. Idioma: ${language}.`;
-  return await callGemini(prompt, {}, fileData);
+  return await callGemini(prompt, {}, fileData, billing);
 };
 
-export const generateFlashcards = async (userId: string, topic: string, language: string = "es", studyLevel: string = "medio", fileData?: any) => {
+export const generateFlashcards = async (userId: string, topic: string, language: string = "es", studyLevel: string = "medio", fileData?: any, billing?: AiBilling) => {
   const prompt = `Crea flashcards (pregunta y respuesta) sobre: ${topic}. Responde en JSON array con 'id', 'front', 'back'.`;
-  const result = await callGemini(prompt, { responseMimeType: "application/json" }, fileData);
+  const result = await callGemini(prompt, { responseMimeType: "application/json" }, fileData, billing);
   return typeof result === 'string' ? extractJSON(result) : result;
 };
 
-export const generateExam = async (userId: string, topic: string, language: string = "es", studyLevel: string = "medio", fileData?: any) => {
+export const generateExam = async (userId: string, topic: string, language: string = "es", studyLevel: string = "medio", fileData?: any, billing?: AiBilling) => {
   const prompt = `Crea un examen de opción múltiple sobre: ${topic}. Responde en JSON array con 'id' (un identificador único para cada pregunta, ej: question_1, question_2, etc.), 'question', 'options', 'correctAnswer' (índice 0-3), 'explanation'.`;
-  const result = await callGemini(prompt, { responseMimeType: "application/json" }, fileData);
+  const result = await callGemini(prompt, { responseMimeType: "application/json" }, fileData, billing);
   return typeof result === 'string' ? extractJSON(result) : result;
 };
 
-export const generateDiagram = async (userId: string, topic: string, language: string = "es", studyLevel: string = "medio", fileData?: any) => {
-  return await callGemini(`Genera un diagrama Mermaid sobre: ${topic}`, {}, fileData);
+export const generateDiagram = async (userId: string, topic: string, language: string = "es", studyLevel: string = "medio", fileData?: any, billing?: AiBilling) => {
+  return await callGemini(`Genera un diagrama Mermaid sobre: ${topic}`, {}, fileData, billing);
 };
 
-export const generateExercises = async (userId: string, topic: string, language: string = "es", studyLevel: string = "medio", fileData?: any) => {
-  return await callGemini(`Genera ejercicios prácticos sobre: ${topic}`, {}, fileData);
+export const generateExercises = async (userId: string, topic: string, language: string = "es", studyLevel: string = "medio", fileData?: any, billing?: AiBilling) => {
+  return await callGemini(`Genera ejercicios prácticos sobre: ${topic}`, {}, fileData, billing);
 };
 
 export const generateArenaQuestions = async (category: string, level: string) => {
@@ -217,7 +135,7 @@ export const generateArenaQuestions = async (category: string, level: string) =>
   
   Asegúrate de que las preguntas sean desafiantes pero adecuadas para el nivel ${level}.`;
   
-  const result = await callGemini(prompt, { responseMimeType: "application/json" });
+  const result = await callGemini(prompt, { responseMimeType: "application/json" }, undefined, newAiAction('arena_questions'));
   return typeof result === 'string' ? extractJSON(result) : result;
 };
 
@@ -226,28 +144,22 @@ export const generateExercise = generateExercises;
 export const generateExamples = generateExercises;
 
 // Funciones adicionales requeridas por la App
-export const generateTheory = async (userId: string, topic: string, language: string, studyLevel?: any, fileData?: any) => {
-  return await callGemini(`Genera una explicación teórica profunda sobre: ${topic}. Nivel: ${studyLevel}. Idioma: ${language}.`, {}, fileData);
+export const generateTheory = async (userId: string, topic: string, language: string, studyLevel?: any, fileData?: any, billing?: AiBilling) => {
+  return await callGemini(`Genera una explicación teórica profunda sobre: ${topic}. Nivel: ${studyLevel}. Idioma: ${language}.`, {}, fileData, billing);
 };
 
-export const generatePodcastScript = async (userId: string, topic: string, language: string, studyLevel?: any, fileData?: any) => {
+export const generatePodcastScript = async (userId: string, topic: string, language: string, studyLevel?: any, fileData?: any, billing?: AiBilling) => {
   const teacherPrompt = `Genera un guión de podcast educativo extenso sobre: ${topic}. 
   TONO: Actúa como una profesora apasionada, cercana y experta que le habla directamente a su alumno. Usa una estructura clara, con pausas naturales, ejemplos cotidianos y frases como "Escuchá bien esto...", "Esto suele entrar en examen, así que prestá atención", "Como si estuviéramos en clase...". 
   OBJETIVO: Explicar conceptos complejos de forma sencilla y amena.
   Nivel: ${studyLevel}. Idioma: ${language}. 
   Responde únicamente con el guión narrado, sin incluir nombres de locutores, metadatos ni marcas de tiempo. 
   El texto debe ser fluido y extenso.`;
-  return await callGemini(teacherPrompt, {}, fileData);
+  return await callGemini(teacherPrompt, {}, fileData, billing);
 };
 
-export const generatePodcastAudio = async (userId: string, script: string) => {
+export const generatePodcastAudio = async (userId: string, script: string, billing?: AiBilling) => {
   try {
-    const apiKey = getClientGeminiApiKey();
-    
-    if (!apiKey) return null;
-
-    const genAI = new GoogleGenAI({ apiKey });
-    
     // Limpiar el script de caracteres especiales y limitar longitud para evitar errores 500
     // El modelo TTS es muy sensible a la longitud y caracteres especiales en su fase preview
     const cleanScript = script
@@ -264,7 +176,7 @@ export const generatePodcastAudio = async (userId: string, script: string) => {
       return null;
     }
 
-    const result = await genAI.models.generateContent({
+    const result = await requestGeneration({
       model: "gemini-3-flash-preview-tts",
       contents: [{ parts: [{ text: cleanScript }] }],
       config: {
@@ -275,6 +187,7 @@ export const generatePodcastAudio = async (userId: string, script: string) => {
           },
         },
       },
+      billing,
     });
 
     return result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
@@ -284,12 +197,12 @@ export const generatePodcastAudio = async (userId: string, script: string) => {
   }
 };
 
-export const identifyLocation = async (userId: string, lat: number, lon: number, language: string) => {
-  return await callGemini(`Identifica la ubicación: Lat: ${lat}, Lon: ${lon}. Idioma: ${language}.`);
+export const identifyLocation = async (userId: string, lat: number, lon: number, language: string, billing?: AiBilling) => {
+  return await callGemini(`Identifica la ubicación: Lat: ${lat}, Lon: ${lon}. Idioma: ${language}.`, {}, undefined, billing);
 };
 
-export const searchLocation = async (userId: string, query: string, language: string) => {
-  return await callGemini(`Busca información sobre: ${query}. Idioma: ${language}.`);
+export const searchLocation = async (userId: string, query: string, language: string, billing?: AiBilling) => {
+  return await callGemini(`Busca información sobre: ${query}. Idioma: ${language}.`, {}, undefined, billing);
 };
 
 export const generateImage = async (prompt: string) => {
@@ -364,7 +277,7 @@ export const handleAIError = (error: any, customMessage?: string) => {
       duration: 8000
     });
   } else if (errorMessage.includes('api key not valid') || errorMessage.includes('invalid api key')) {
-    toast.error('Error de API Key: La clave configurada no es válida. Si estás en tu propia web, asegúrate de configurar la variable VITE_GEMINI_API_KEY en tu hosting y volver a buildear.', {
+    toast.error('La configuración de IA del servidor no es válida. Contactá al administrador.', {
       duration: 10000
     });
   } else if (errorMessage.includes('API key not valid')) {
@@ -425,38 +338,38 @@ export const extractJSON = (text: string): any => {
   }
 };
 
-export const getAI = () => ({
-  models: { 
+const toResponse = (result: any) => {
+  // Si el resultado ya es un objeto (como en el caso de TTS), lo devolvemos tal cual
+  if (typeof result === 'object' && result !== null) {
+    return result;
+  }
+  return {
+    text: result,
+    candidates: [{ content: { parts: [{ text: result, inlineData: null }] } }]
+  };
+};
+
+/**
+ * Interfaz compatible con el SDK que usan los componentes. `billing` es la acción del
+ * usuario: todas las llamadas hechas con esta instancia se cobran una sola vez.
+ */
+export const getAI = (billing?: AiBilling) => ({
+  models: {
     generateContent: async (c: any) => {
       // Pasamos el modelo si viene en el objeto de configuración
       const config = { ...c.config, model: c.model };
-      const result = await callGemini(c.contents[0].parts[0].text, config);
-      
-      // Si el resultado ya es un objeto (como en el caso de TTS), lo devolvemos tal cual
-      if (typeof result === 'object' && result !== null) {
-        return result;
-      }
-      
-      return { 
-        text: result,
-        candidates: [{ content: { parts: [{ text: result, inlineData: null }] } }]
-      };
+      return toResponse(await runGeneration(c.contents[0].parts[0].text, config, undefined, billing));
     }
   },
   chats: {
-    create: (config?: any) => ({
+    // { model, config: { systemInstruction }, history } como en el SDK: la instrucción y el
+    // historial ahora se envían al modelo (antes se descartaban).
+    create: (chat?: any) => ({
       sendMessage: async (msg: any) => {
         const prompt = typeof msg === 'string' ? msg : msg.message;
-        const result = await callGemini(prompt, config);
-        
-        if (typeof result === 'object' && result !== null) {
-          return result;
-        }
-        
-        return { 
-          text: result,
-          candidates: [{ content: { parts: [{ text: result, inlineData: null }] } }]
-        };
+        const config = { ...(chat?.config || {}), model: chat?.model };
+        const history = Array.isArray(chat?.history) ? chat.history : [];
+        return toResponse(await runGeneration(prompt, config, undefined, billing, history));
       }
     })
   }

@@ -57,8 +57,14 @@ npx tsx scripts/legacy-config-to-env.ts /ruta/a/firebase-applet-config.json >> .
 | `RATE_LIMIT_API_PER_MINUTE` | No | Límite general por IP para `/api/*` (300 por defecto; el webhook de Mercado Pago queda excluido). |
 | `CSP_MODE` | No | `report-only` (por defecto: el navegador informa qué bloquearía la política y los reportes llegan a `/api/csp-report`, sin bloquear nada) u `off`. |
 | `STORAGE_CORS_ON_STARTUP` | No | `true` reescribe el CORS del bucket a `*` en cada arranque (comportamiento anterior). Desactivado por defecto. |
-| `AI_PROXY_ENABLED` | No | `true` activa `/api/ai/generate`. **Desactivado por defecto.** |
-| `GEMINI_API_KEY` | Si `AI_PROXY_ENABLED=true` | Clave de Gemini **del servidor**. |
+| `AI_PROXY_ENABLED` | No | `true` activa `/api/ai/generate` (la única vía de la app hacia Gemini). **Desactivado por defecto.** |
+| `AI_PROVIDER` | No | `gemini` (por defecto) o `fake` (respuestas simuladas sin costo, **rechazado en producción**). |
+| `GEMINI_API_KEY` | Si `AI_PROXY_ENABLED=true` con `gemini` | Clave de Gemini **del servidor**. Nunca con prefijo `VITE_`. |
+| `AI_RATE_LIMIT_PER_MINUTE`, `AI_MAX_CONCURRENT_PER_USER` | No | Límites por usuario (20 por minuto y 3 simultáneas por defecto). |
+| `AI_INCLUDED_DAILY_QUOTA` | No | Cuota diaria de las herramientas sin costo (60 por defecto). |
+| `AI_MAX_UPSTREAM_ATTEMPTS`, `AI_UPSTREAM_TIMEOUT_MS` | No | Reintentos y modelos de respaldo por solicitud (4 por defecto) y tiempo máximo por intento (90 s por defecto). |
+
+Con `AI_PROXY_ENABLED=true`, el servidor **no arranca** si `FIREBASE_DATABASE_ID` y `VITE_FIREBASE_FIRESTORE_DATABASE_ID` (cuando está presente en el entorno) apuntan a bases distintas: los créditos se cobrarían en una base que la app no lee.
 | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_PUBLIC_KEY` | Para pagos | — |
 | `GOOGLE_CLIENT_ID/SECRET`, `OUTLOOK_CLIENT_ID/SECRET` | Para Calendar y Drive | — |
 
@@ -79,6 +85,15 @@ npm run scan:source                 # los archivos versionados no contienen secr
 
 `scan:bundle` permite el valor de `VITE_FIREBASE_API_KEY` (público por diseño) y falla ante cualquier otra clave de Google, un token de Mercado Pago, una clave privada o el valor de cualquier variable privada presente en el entorno.
 
-## Clave de Gemini en el navegador (temporal)
+## Gemini: solo en el servidor (Fase 4)
 
-`VITE_GEMINI_API_KEY` sigue funcionando para no romper las funciones de IA, pero **queda pública en el bundle**. El build lo advierte y `scan:bundle` falla a propósito. La solución es la migración propuesta en [`PROPOSAL_AI_BACKEND.md`](./PROPOSAL_AI_BACKEND.md), pendiente de aprobación.
+`VITE_GEMINI_API_KEY` **ya no existe**: el navegador no tiene ninguna clave ni el SDK de Gemini. Toda la IA pasa por `/api/ai/generate` (ver [`PHASE4_REPORT.md`](./PHASE4_REPORT.md)). Si la variable sigue en tu `.env`, el build te avisa para que la elimines.
+
+## Desarrollo local sin servicios reales
+
+```bash
+npm run dev:emulators                  # emuladores de Firebase + IA simulada (AI_PROVIDER=fake)
+npm run dev:emulators -- --final-rules # lo mismo, con las reglas finales de créditos
+```
+
+No usa Firebase de producción, Gemini real ni ningún servicio pago. Abrí http://localhost:3000 e iniciá sesión con una cuenta de prueba del emulador de Auth.

@@ -18,7 +18,9 @@ import { SUBSCRIPTION_PLANS } from "../../src/constants";
 export const DAILY_REFILL_CREDITS = 5;
 export const FREE_PLAN_NAME = "Gratis";
 
-export type CreditErrorCode = "INSUFFICIENT_CREDITS" | "TRIAL_ALREADY_USED" | "USER_NOT_FOUND" | "INVALID_AMOUNT" | "UNKNOWN_PLAN" | "INVALID_REQUEST_ID";
+export type CreditErrorCode =
+  | "INSUFFICIENT_CREDITS" | "TRIAL_ALREADY_USED" | "USER_NOT_FOUND" | "INVALID_AMOUNT" | "UNKNOWN_PLAN" | "INVALID_REQUEST_ID"
+  | "ACTION_LIMIT" | "ACTION_CLOSED" | "DAILY_QUOTA_EXCEEDED";
 
 export class CreditError extends Error {
   constructor(readonly code: CreditErrorCode) {
@@ -38,6 +40,15 @@ export interface Balance {
   subscriptionType: string;
   hasUsedFreeTrial: boolean;
   refilledToday: boolean;
+  /** Paid plan currently active (used by the AI kill switch for free users). */
+  planActive: boolean;
+}
+
+function isPlanActive(data: FirebaseFirestore.DocumentData | undefined, now: Date): boolean {
+  const sub = data?.subscription;
+  if (sub?.status !== "active") return false;
+  const end = sub.subscriptionEndDate;
+  return !end || typeof end.toMillis !== "function" || end.toMillis() > now.getTime();
 }
 
 export interface ConsumeResult {
@@ -94,16 +105,18 @@ export function createCreditService(db: Firestore, options: CreditServiceOptions
           subscriptionType: data?.subscriptionType || FREE_PLAN_NAME,
           hasUsedFreeTrial: data?.hasUsedFreeTrial === true,
           refilledToday: refilled || data?.lastCreditReset === utcDay(now()),
+          planActive: isPlanActive(data, now()),
         };
       }, { maxAttempts });
     },
 
     /**
-     * Charges `amount` credits for one AI request, BEFORE calling the model.
+     * Charges `amount` credits for one user action, BEFORE calling the model.
      * Atomic: concurrent requests can never spend more than the balance.
-     * Idempotent per requestId (a retried request is not charged twice).
+     * Idempotent per requestId (an action is charged once). Later calls of the same action
+     * are allowed up to `maxCalls` in total; a refunded action cannot be reused.
      */
-    async consume(uid: string, requestId: string, amount = 1, reason = "ai"): Promise<ConsumeResult> {
+    async consume(uid: string, requestId: string, amount = 1, reason = "ai", limits: { maxCalls?: number } = {}): Promise<ConsumeResult> {
       if (!Number.isInteger(amount) || amount <= 0 || amount > 100) throw new CreditError("INVALID_AMOUNT");
       if (!REQUEST_ID.test(requestId)) throw new CreditError("INVALID_REQUEST_ID");
 
@@ -112,14 +125,21 @@ export function createCreditService(db: Firestore, options: CreditServiceOptions
         const entry = ledgerRef(uid, `consume_${requestId}`);
         const [snap, existing] = await Promise.all([tx.get(ref), tx.get(entry)]);
         if (!snap.exists) throw new CreditError("USER_NOT_FOUND");
-        if (existing.exists) return { credits: readCredits(snap.data()), duplicate: true };
+        if (existing.exists) {
+          const entryData = existing.data() || {};
+          if (entryData.refunded === true) throw new CreditError("ACTION_CLOSED");
+          const calls = typeof entryData.calls === "number" ? entryData.calls : 1;
+          if (calls >= (limits.maxCalls ?? 1)) throw new CreditError("ACTION_LIMIT");
+          tx.update(entry, { calls: calls + 1 });
+          return { credits: readCredits(snap.data()), duplicate: true };
+        }
 
         const { credits } = refillIfEligible(tx, ref, snap.data(), uid);
         if (credits < amount) throw new CreditError("INSUFFICIENT_CREDITS");
 
         const balanceAfter = credits - amount;
         tx.set(ref, { remainingCredits: balanceAfter }, { merge: true });
-        tx.set(entry, { type: "consume", amount, reason, balanceAfter, refunded: false, createdAt: FieldValue.serverTimestamp() });
+        tx.set(entry, { type: "consume", amount, reason, balanceAfter, calls: 1, refunded: false, createdAt: FieldValue.serverTimestamp() });
         return { credits: balanceAfter, duplicate: false };
       }, { maxAttempts });
     },
@@ -152,7 +172,7 @@ export function createCreditService(db: Firestore, options: CreditServiceOptions
         const plan = SUBSCRIPTION_PLANS.PRUEBA;
         tx.set(ref, { remainingCredits: plan.credits, subscriptionType: plan.name, hasUsedFreeTrial: true }, { merge: true });
         tx.set(ledgerRef(uid, "free_trial"), { type: "free_trial", amount: plan.credits, balanceAfter: plan.credits, createdAt: FieldValue.serverTimestamp() });
-        return { credits: plan.credits, subscriptionType: plan.name, hasUsedFreeTrial: true, refilledToday: false };
+        return { credits: plan.credits, subscriptionType: plan.name, hasUsedFreeTrial: true, refilledToday: false, planActive: isPlanActive(snap.data(), now()) };
       }, { maxAttempts });
     },
 
@@ -184,6 +204,21 @@ export function createCreditService(db: Firestore, options: CreditServiceOptions
         }, { merge: true });
         tx.set(entry, { type: "plan_purchase", planId, amount: plan.credits, balanceAfter: plan.credits, createdAt: FieldValue.serverTimestamp() });
         return { applied: true };
+      }, { maxAttempts });
+    },
+
+    /**
+     * Daily quota for features that do not cost credits (they were free before Phase 4).
+     * Counted per user and UTC day; the counter lives in the server-only creditLedger.
+     */
+    async recordIncludedUsage(uid: string, feature: string, dailyLimit: number): Promise<{ used: number }> {
+      return db.runTransaction(async (tx) => {
+        const entry = ledgerRef(uid, `usage_${utcDay(now())}`);
+        const snap = await tx.get(entry);
+        const used = typeof snap.data()?.count === "number" ? snap.data()!.count : 0;
+        if (used >= dailyLimit) throw new CreditError("DAILY_QUOTA_EXCEEDED");
+        tx.set(entry, { type: "included_usage", count: used + 1, byFeature: { [feature]: FieldValue.increment(1) }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return { used: used + 1 };
       }, { maxAttempts });
     },
 

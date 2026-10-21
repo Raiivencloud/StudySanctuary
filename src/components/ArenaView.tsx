@@ -39,7 +39,7 @@ import {
 import { ArenaQuestion, ArenaUserStats, ArenaCollectible, ArenaRankingEntry, StudyLevel } from '../types';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
-import { consumeCredit } from '../services/userService';
+import { spendCredit } from '../services/userService';
 import { serverTimestamp } from '../firebase';
 
 import { INITIAL_CARDS } from '../constants/arenaCards';
@@ -529,7 +529,7 @@ export const ArenaView: React.FC<ArenaViewProps> = ({ onExit }) => {
     try {
       // Check if user is VIP or has credits
       // For now, let's assume they need 1 credit
-      await consumeCredit(user.uid);
+      await spendCredit(user.uid, 'arena_cooldown');
       
       const updates: Partial<ArenaUserStats> = {
         lives: 3,

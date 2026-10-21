@@ -35,6 +35,7 @@ Configuration comes from environment variables (no `firebase-applet-config.json`
 npm ci
 npm run verify:config   # validates client/server config without printing values
 npm run dev             # http://localhost:3000
+npm run dev:emulators   # local Firebase emulators + simulated AI (no real services, no cost)
 npm run verify          # typecheck + unit tests + secret scan + bundle tests
 npm run test:rules      # Firestore/Storage rules + ops scripts on the local Firebase Emulator (demo project, needs Java 21)
 ```

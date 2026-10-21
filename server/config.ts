@@ -50,7 +50,14 @@ export interface ServerConfig {
   ai: {
     /** Server-side Gemini proxy (/api/ai/*). Disabled by default. */
     proxyEnabled: boolean;
+    /** "gemini" (real API, needs GEMINI_API_KEY) or "fake" (development only, no cost). */
+    provider: "gemini" | "fake";
     geminiApiKey?: string;
+    perMinute: number;
+    maxConcurrent: number;
+    includedDailyQuota: number;
+    maxAttempts: number;
+    timeoutMs: number;
   };
 }
 
@@ -146,9 +153,31 @@ export function loadServerConfig(env: Env = process.env): ServerConfig {
 
   const proxyEnabled = read(env, "AI_PROXY_ENABLED") === "true";
   const geminiApiKey = read(env, "GEMINI_API_KEY") || undefined;
-  if (proxyEnabled && !geminiApiKey) {
+  const providerRaw = read(env, "AI_PROVIDER").toLowerCase() || "gemini";
+  if (providerRaw !== "gemini" && providerRaw !== "fake") {
+    problems.push("AI_PROVIDER debe ser gemini o fake.");
+  }
+  const provider: "gemini" | "fake" = providerRaw === "fake" ? "fake" : "gemini";
+  if (provider === "fake" && isProduction) {
+    problems.push("AI_PROVIDER=fake (respuestas simuladas) no está permitido en producción.");
+  }
+  if (proxyEnabled && provider === "gemini" && !geminiApiKey) {
     problems.push("AI_PROXY_ENABLED=true requiere GEMINI_API_KEY (clave de servidor, nunca VITE_*).");
   }
+  // Credits are charged in the server's database: it must be the one the app reads.
+  const clientDatabase = read(env, "VITE_FIREBASE_FIRESTORE_DATABASE_ID") || "(default)";
+  const serverDatabase = databaseId || "(default)";
+  if (proxyEnabled && read(env, "VITE_FIREBASE_FIRESTORE_DATABASE_ID") && clientDatabase !== serverDatabase) {
+    problems.push(
+      `FIREBASE_DATABASE_ID ("${serverDatabase}") no coincide con VITE_FIREBASE_FIRESTORE_DATABASE_ID ("${clientDatabase}"): ` +
+      "los créditos se cobrarían en una base distinta de la que lee la app (ver docs/FIRESTORE_DATABASES.md)."
+    );
+  }
+  const aiPerMinute = readPositiveInt(env, "AI_RATE_LIMIT_PER_MINUTE", 20, problems);
+  const aiMaxConcurrent = readPositiveInt(env, "AI_MAX_CONCURRENT_PER_USER", 3, problems);
+  const aiIncludedDailyQuota = readPositiveInt(env, "AI_INCLUDED_DAILY_QUOTA", 60, problems);
+  const aiMaxAttempts = readPositiveInt(env, "AI_MAX_UPSTREAM_ATTEMPTS", 4, problems);
+  const aiTimeoutMs = readPositiveInt(env, "AI_UPSTREAM_TIMEOUT_MS", 90_000, problems);
 
   if (problems.length > 0) {
     throw new ConfigError(problems);
@@ -176,6 +205,15 @@ export function loadServerConfig(env: Env = process.env): ServerConfig {
       mode: cspRaw === "off" ? "off" : "report-only",
       firebaseAuthDomain: read(env, "VITE_FIREBASE_AUTH_DOMAIN") || undefined,
     },
-    ai: { proxyEnabled, geminiApiKey },
+    ai: {
+      proxyEnabled,
+      provider,
+      geminiApiKey,
+      perMinute: aiPerMinute,
+      maxConcurrent: aiMaxConcurrent,
+      includedDailyQuota: aiIncludedDailyQuota,
+      maxAttempts: aiMaxAttempts,
+      timeoutMs: aiTimeoutMs,
+    },
   };
 }

@@ -48,7 +48,11 @@ try {
 }
 
 if ((env.VITE_GEMINI_API_KEY || env.VITE_GOOGLE_API_KEY || "").trim()) {
-  console.warn("[aviso] VITE_GEMINI_API_KEY está definida: la clave quedará pública en el bundle (uso temporal).");
+  console.warn("[aviso] VITE_GEMINI_API_KEY está definida: ya no se usa y quedaría pública en el bundle. Eliminala.");
+}
+if (env.VITE_USE_FIREBASE_EMULATORS === "true" && env.NODE_ENV === "production") {
+  ok = false;
+  console.error("[cliente] VITE_USE_FIREBASE_EMULATORS=true no debe usarse en producción (la app se conectaría a localhost).");
 }
 
 process.exit(ok ? 0 : 1);

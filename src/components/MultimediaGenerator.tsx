@@ -24,7 +24,8 @@ import { toast } from 'sonner';
 import { identifyLocation, searchLocation } from '../services/geminiService';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { getUserCredits, consumeCredit } from '../services/userService';
+import { getUserCredits, refreshCredits } from '../services/userService';
+import { newAiAction } from '../services/aiClient';
 import { UsageLimitModal } from './UsageLimitModal';
 import { isTrafficLimitReached } from '../lib/trafficMonitor';
 
@@ -126,7 +127,7 @@ export const MultimediaGenerator: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const result = await searchLocation(user.uid, searchQuery, language);
+      const result = await searchLocation(user.uid, searchQuery, language, newAiAction('maps'));
       if (result) {
         const trafficReached = isTrafficLimitReached();
         setMapCenter([result.lat, result.lon]);
@@ -138,7 +139,7 @@ export const MultimediaGenerator: React.FC = () => {
             : `https://picsum.photos/seed/${result.name.replace(/\s+/g, '')}/400/200`
         });
         // Update credits after successful call
-        await consumeCredit(user.uid);
+        await refreshCredits(user.uid);
         getUserCredits(user.uid).then(data => setCredits(data.credits));
       } else {
         toast.error('Ubicación no encontrada');
@@ -175,7 +176,7 @@ export const MultimediaGenerator: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const result = await identifyLocation(user.uid, lat, lon, language);
+      const result = await identifyLocation(user.uid, lat, lon, language, newAiAction('maps'));
       if (result) {
         const trafficReached = isTrafficLimitReached();
         const locationData = {
@@ -190,7 +191,7 @@ export const MultimediaGenerator: React.FC = () => {
         setCachedLocation(cacheKey, locationData);
         setMapCenter([lat, lon]);
         // Update credits
-        await consumeCredit(user.uid);
+        await refreshCredits(user.uid);
         getUserCredits(user.uid).then(data => setCredits(data.credits));
       }
     } catch (error: any) {

@@ -48,6 +48,7 @@ Las reglas 3A requieren tres cambios pequeños del cliente, ya incluidos en esta
 | `userService.consumeCredit`: el registro en `stats/global` es no fatal | `consumeCredit` lanza un error: en el asistente de voz se pierde la respuesta de la IA y otras vistas muestran error tras generar |
 | `FeedbackView`: `isPublic: false` + `publicCandidate` | Las opiniones con 4 o 5 estrellas fallan al enviarse |
 | `ArenaView`: `lastAnsweredAt: serverTimestamp()` en las respuestas correctas | Cada respuesta correcta falla y la Arena deja de sumar puntos |
+| `VirtualTutor` / `VoiceAssistant`: seleccionar solo chats ya guardados (**corrección encontrada en la Fase 4**, rama `phase4-ai-backend`) | Al crear un chat nuevo, la respuesta del tutor o del asistente de voz puede no aparecer en pantalla (la suscripción a los mensajes se rechaza) |
 
 **Orden:**
 1. Desplegar la app (cliente y servidor) de esta rama. Los cambios son compatibles con las reglas actuales.

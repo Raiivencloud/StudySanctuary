@@ -8,7 +8,8 @@ import { useCourses } from '../contexts/CourseContext';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { db } from '../firebase';
-import { getUserCredits, consumeCredit } from '../services/userService';
+import { getUserCredits, refreshCredits } from '../services/userService';
+import { newAiAction } from '../services/aiClient';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { UsageLimitModal } from './UsageLimitModal';
 
@@ -67,12 +68,13 @@ export const PodcastView: React.FC<PodcastViewProps> = ({ driveFile }) => {
         return;
       }
 
-      const script = await generatePodcastScript(user.uid, content, language, undefined);
-      const audioBase64 = await generatePodcastAudio(user.uid, script);
+      const podcastAction = newAiAction('podcast'); // script + audio = one credit
+      const script = await generatePodcastScript(user.uid, content, language, undefined, undefined, podcastAction);
+      const audioBase64 = await generatePodcastAudio(user.uid, script, podcastAction);
       
       if (audioBase64) {
         // Consume credit after successful generation
-        await consumeCredit(user.uid);
+        await refreshCredits(user.uid);
         
         playAudio(audioBase64);
         setCurrentTrack({ title, text: script });
@@ -122,11 +124,12 @@ export const PodcastView: React.FC<PodcastViewProps> = ({ driveFile }) => {
       const fileData = { data: base64Data, mimeType: file.type, text };
       const content = text || `Contenido del archivo ${file.name}`;
       
-      const script = await generatePodcastScript(user.uid, content, language, undefined, fileData);
-      const audioBase64 = await generatePodcastAudio(user.uid, script);
+      const podcastAction = newAiAction('podcast'); // script + audio = one credit
+      const script = await generatePodcastScript(user.uid, content, language, undefined, fileData, podcastAction);
+      const audioBase64 = await generatePodcastAudio(user.uid, script, podcastAction);
       
       if (audioBase64) {
-        await consumeCredit(user.uid);
+        await refreshCredits(user.uid);
         playAudio(audioBase64);
         setCurrentTrack({ title: file.name, text: script });
         toast.success('¡Podcast generado desde el archivo!');

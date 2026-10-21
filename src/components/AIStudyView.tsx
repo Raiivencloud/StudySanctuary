@@ -4,7 +4,8 @@ import { useCourses } from '../contexts/CourseContext';
 import { Sparkles, BookOpen, Target, Loader2, ChevronRight, AlertCircle, CheckCircle2, ThumbsUp, ThumbsDown, Play, Pause, RotateCcw, Timer, Layers, ChevronLeft, RefreshCw, Download, Upload, FileText, X, Copy, Check, Activity, Table as TableIcon } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { generateSummary, generateAdaptivePlan, generateFlashcards, generateExam, generateExercises, generateDiagram, getAI, handleAIError as centralHandleAIError } from '../services/geminiService';
-import { getUserCredits, consumeCredit } from '../services/userService';
+import { getUserCredits, refreshCredits } from '../services/userService';
+import { newAiAction } from '../services/aiClient';
 import type { StudyPlan } from '../services/geminiService';
 import { Flashcard, ExamQuestion, ExamResult, StudyLevel } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -226,13 +227,12 @@ export const AIStudyView: React.FC<{
         currentTopic, 
         language, 
         studyLevel,
-        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined
-      );
+        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined, newAiAction('study'));
       setSummaryResult(result || '');
       
       // Consumir crédito tras respuesta exitosa
       if (userId) {
-        await consumeCredit(userId);
+        await refreshCredits(userId);
       }
       
       toast.success('¡Listo!');
@@ -284,13 +284,12 @@ export const AIStudyView: React.FC<{
         45, 
         language,
         studyLevel,
-        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined
-      );
+        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined, newAiAction('study'));
       setPlanResult(result);
       
       // Consumir crédito tras respuesta exitosa
       if (userId) {
-        await consumeCredit(userId);
+        await refreshCredits(userId);
       }
       
       toast.success('¡Listo!');
@@ -345,13 +344,12 @@ export const AIStudyView: React.FC<{
         currentTopic, 
         language,
         studyLevel,
-        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined
-      );
+        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined, newAiAction('study'));
       setFlashcardsResult(result);
       
       // Consumir crédito tras respuesta exitosa
       if (userId) {
-        await consumeCredit(userId);
+        await refreshCredits(userId);
       }
       
       toast.success('¡Listo!');
@@ -408,8 +406,7 @@ export const AIStudyView: React.FC<{
         currentTopic, 
         language, 
         studyLevel,
-        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined
-      );
+        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined, newAiAction('study'));
       
       // Asegurar que cada pregunta tenga un ID único (combinación de timestamp e índice)
       const timestamp = Date.now();
@@ -422,7 +419,7 @@ export const AIStudyView: React.FC<{
       
       // Consumir crédito tras respuesta exitosa
       if (userId) {
-        await consumeCredit(userId);
+        await refreshCredits(userId);
       }
       
       toast.success('¡Listo!');
@@ -509,13 +506,12 @@ export const AIStudyView: React.FC<{
         currentTopic,
         language,
         studyLevel,
-        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined
-      );
+        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined, newAiAction('study'));
       setExercisesResult(result || '');
       
       // Consumir crédito tras respuesta exitosa
       if (userId) {
-        await consumeCredit(userId);
+        await refreshCredits(userId);
       }
       
       toast.success('¡Listo!');
@@ -565,13 +561,12 @@ export const AIStudyView: React.FC<{
         currentTopic,
         language,
         studyLevel,
-        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined
-      );
+        selectedFile ? { data: selectedFile.data, text: selectedFile.text, mimeType: selectedFile.mimeType } : undefined, newAiAction('study'));
       setDiagramResult(result || '');
       
       // Consumir crédito tras respuesta exitosa
       if (userId) {
-        await consumeCredit(userId);
+        await refreshCredits(userId);
       }
       
       toast.success('¡Listo!');

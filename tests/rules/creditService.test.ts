@@ -49,12 +49,45 @@ test("concurrency: 20 simultaneous requests with 3 credits charge exactly 3", as
   assert.equal((await ledger("alice")).filter((e: any) => e.type === "consume").length, 3);
 });
 
-test("idempotency: retrying the same request id never charges twice", async () => {
+test("idempotency: the same action id is charged once; extra calls are limited per action", async () => {
   await user("alice").set({ remainingCredits: 5, lastCreditReset: utcDay(new Date()) });
   const service = createCreditService(db);
-  const [a, b] = await Promise.all([service.consume("alice", rid("x")), service.consume("alice", rid("x"))]);
-  assert.deepEqual([a.duplicate, b.duplicate].sort(), [false, true]);
+
+  // Single-call action: a duplicate request is rejected, never charged twice.
+  const results = await Promise.allSettled([service.consume("alice", rid("x")), service.consume("alice", rid("x"))]);
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+  const rejected = results.find((r): r is PromiseRejectedResult => r.status === "rejected")!;
+  assert.equal(codeOf(rejected.reason), "ACTION_LIMIT");
   assert.equal(await credits("alice"), 4);
+
+  // Two-call action (podcast: script + audio): one charge, the third call is refused.
+  assert.equal((await service.consume("alice", rid("p"), 1, "podcast", { maxCalls: 2 })).duplicate, false);
+  assert.equal((await service.consume("alice", rid("p"), 1, "podcast", { maxCalls: 2 })).duplicate, true);
+  await assert.rejects(service.consume("alice", rid("p"), 1, "podcast", { maxCalls: 2 }), (e) => codeOf(e) === "ACTION_LIMIT");
+  assert.equal(await credits("alice"), 3);
+
+  // A refunded action cannot be reused for free.
+  await service.refund("alice", rid("p"));
+  await assert.rejects(service.consume("alice", rid("p"), 1, "podcast", { maxCalls: 2 }), (e) => codeOf(e) === "ACTION_CLOSED");
+  assert.equal(await credits("alice"), 4);
+});
+
+test("included features: daily quota per user, counted on the server", async () => {
+  const service = createCreditService(db);
+  for (let i = 0; i < 3; i++) await service.recordIncludedUsage("alice", "course_tools", 3);
+  await assert.rejects(service.recordIncludedUsage("alice", "arena_questions", 3), (e) => codeOf(e) === "DAILY_QUOTA_EXCEEDED");
+  const usage = (await ledger("alice")).find((e: any) => e.type === "included_usage") as any;
+  assert.equal(usage.count, 3);
+  assert.deepEqual(usage.byFeature, { course_tools: 3 });
+});
+
+test("balance reports whether a paid plan is active (AI kill switch)", async () => {
+  const service = createCreditService(db);
+  await user("free").set({ remainingCredits: 2, lastCreditReset: utcDay(new Date()) });
+  assert.equal((await service.getBalance("free")).planActive, false);
+  await user("paid").set({ remainingCredits: 2 });
+  await service.applyPlanPurchase("paid", "anual", "pay-active");
+  assert.equal((await service.getBalance("paid")).planActive, true);
 });
 
 test("refund returns the credit once (failed AI call)", async () => {

@@ -17,7 +17,12 @@ import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { loadServerConfig, ConfigError, type ServerConfig } from "./server/config";
-import { createAiProxyRouter } from "./server/ai/geminiProxy";
+import { GoogleGenAI } from "@google/genai";
+import { FieldValue } from "firebase-admin/firestore";
+import { createAiRouter } from "./server/ai/aiRouter";
+import { createFakeGenAI } from "./server/ai/fakeGenAI";
+import { createCreditService } from "./server/credits/creditService";
+import { createCreditsRouter } from "./server/routes/credits";
 import { createAdminRouter } from "./server/routes/admin";
 import { createStorageUploadRouter } from "./server/routes/storageUpload";
 import { createOAuthRouter } from "./server/routes/oauth";
@@ -106,16 +111,55 @@ async function startServer() {
     key: (req) => (req.path === "/mercadopago-webhook" ? null : ipKey(req)),
   }));
 
-  // Server-side Gemini proxy (disabled unless AI_PROXY_ENABLED=true). Mounted before the
-  // global JSON parser because it needs a larger body limit for multimodal requests.
-  app.use("/api/ai", createAiProxyRouter({
+  // Credits and AI (Phase 4). The server is the authority: credits are charged in the
+  // database configured by FIREBASE_DATABASE_ID (must be the one the app reads).
+  const creditService = createCreditService(dbAdmin);
+
+  let suspensionCache = { value: false, expiresAt: 0 };
+  const isAiSuspendedForFree = async () => {
+    if (Date.now() < suspensionCache.expiresAt) return suspensionCache.value;
+    try {
+      const snap = await dbAdmin.collection("stats").doc("global").get();
+      suspensionCache = { value: snap.data()?.isAiSuspendedForFree === true, expiresAt: Date.now() + 30_000 };
+    } catch (error) {
+      logError("AI kill switch read", error);
+    }
+    return suspensionCache.value;
+  };
+
+  // Mounted before the global JSON parser because it needs a larger body limit (files in base64).
+  app.use("/api/ai", createAiRouter({
     enabled: serverConfig.ai.proxyEnabled,
-    apiKey: serverConfig.ai.geminiApiKey,
-    verifyIdToken,
+    auth: authOptions,
+    credits: creditService,
+    createClient: () => serverConfig.ai.provider === "fake"
+      ? createFakeGenAI()
+      : new GoogleGenAI({ apiKey: serverConfig.ai.geminiApiKey! }),
+    isAiSuspendedForFree,
+    recordUsage: (feature, billed) => {
+      const today = new Date().toISOString().split("T")[0];
+      dbAdmin.collection("stats").doc("global").set({
+        [`aiCalls_${today}`]: FieldValue.increment(1),
+        ...(billed ? { [`credits_${today}`]: FieldValue.increment(1), totalCreditsConsumed: FieldValue.increment(1) } : {}),
+      }, { merge: true }).catch((error) => logError("AI usage stats", error));
+    },
+    limits: {
+      perMinute: serverConfig.ai.perMinute,
+      maxConcurrent: serverConfig.ai.maxConcurrent,
+      includedDailyQuota: serverConfig.ai.includedDailyQuota,
+      maxAttempts: serverConfig.ai.maxAttempts,
+      timeoutMs: serverConfig.ai.timeoutMs,
+      bodyLimit: "15mb",
+    },
   }));
+  if (serverConfig.ai.proxyEnabled) {
+    console.log(`[Server] AI proxy enabled (provider: ${serverConfig.ai.provider}).`);
+  }
 
   app.use(express.json({ limit: "100kb" }));
   app.use(cookieParser());
+
+  app.use("/api/credits", createCreditsRouter({ auth: authOptions, credits: creditService }));
   
   // Health check endpoint
   app.get("/api/health", (req, res) => {

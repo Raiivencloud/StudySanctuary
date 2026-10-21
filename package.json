@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "dev:emulators": "tsx scripts/dev-with-emulators.ts",
     "build": "vite build && npx esbuild server.ts --bundle --platform=node --outfile=dist/server.cjs --packages=external && cp package.json dist/",
     "start": "NODE_ENV=production node dist/server.cjs",
     "preview": "vite preview",

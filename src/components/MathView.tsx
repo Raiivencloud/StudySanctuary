@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Type, getAI, handleAIError, extractJSON } from '../services/geminiService';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { getUserCredits, consumeCredit } from '../services/userService';
+import { getUserCredits, refreshCredits } from '../services/userService';
+import { newAiAction } from '../services/aiClient';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -51,7 +52,7 @@ export const MathView: React.FC = () => {
         }
       }
 
-      const ai = getAI();
+      const ai = getAI(newAiAction('math'));
       
       const prompt = `Actúa como un experto matemático. Genera 3 ejercicios matemáticos desafiantes y educativos sobre el tema "${topic}" con nivel de dificultad "${difficulty}". 
       Los ejercicios deben ser variados y cubrir diferentes aspectos del tema.
@@ -102,7 +103,7 @@ export const MathView: React.FC = () => {
       
       // Consumir crédito tras respuesta exitosa
       if (user) {
-        await consumeCredit(user.uid);
+        await refreshCredits(user.uid);
       }
       
       toast.success('¡Ejercicios generados!');
