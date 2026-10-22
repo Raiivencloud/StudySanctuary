@@ -1,3 +1,10 @@
+/**
+ * EXPERIMENTAL, NOT ENABLED in the interface (product decision, Phase 7).
+ * Voice chat: browser speech recognition (Web Speech API: Chrome/Edge, audio processed by the
+ * browser vendor) + Gemini answer + Gemini text-to-speech, charged as one AI action through the
+ * server. It is intentionally not imported by any view; enabling it requires reviewing the privacy
+ * texts (microphone) and adding an entry point. See docs/PHASE6_COMMERCIAL_READINESS.md (P6-4).
+ */
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Volume2, VolumeX, X, Loader2, BrainCircuit, RotateCcw, Plus, MessageSquare, Trash2, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';

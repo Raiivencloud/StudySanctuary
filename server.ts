@@ -277,7 +277,6 @@ async function startServer() {
     appUrl: APP_URL,
     google: { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET },
     outlook: { clientId: process.env.OUTLOOK_CLIENT_ID, clientSecret: process.env.OUTLOOK_CLIENT_SECRET },
-    googleDriveAccess: serverConfig.integrations.googleDriveAccess,
     sessionCookie: {
       name: SESSION_COOKIE_NAME,
       secure: serverConfig.session.cookieSecure,

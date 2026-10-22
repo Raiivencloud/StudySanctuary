@@ -82,7 +82,53 @@ Cada bolsa guarda su saldo, lo otorgado originalmente, el vencimiento y el pago 
 
 ## 7. Decisiones que necesito antes de implementar
 
-1. ¿Los créditos de la **prueba gratis** vencen a los 7 días? (Hoy no vencen. La propuesta mantiene que no venzan.)
-2. **Reembolso parcial:** ¿revocación proporcional automática o revisión manual?
-3. **Al vencer el plan:** ¿se eliminan sus créditos no usados de inmediato o se da un margen (por ejemplo, 3 días)?
-4. ¿Se ofrecen paquetes de créditos sueltos (`purchased`)? El modelo los soporta, pero el producto y el precio son decisión tuya. **Sin tu aprobación no se crea ningún producto ni precio nuevo.**
+En todos los casos, los saldos que existan al activar el modelo **se conservan sin vencimiento** (bolsa `legacy`): las respuestas solo afectan a los créditos otorgados después.
+
+### Pregunta 1: ¿Los créditos de la prueba gratis vencen a los 7 días?
+Hoy no vencen. El plan se llama "7 DÍAS GRATIS" y promete "Acceso completo por 7 días".
+
+| Alternativa | Consecuencias |
+|---|---|
+| **A. No vencen** (como hoy) | Simple y favorable al usuario. El nombre "7 días" no se corresponde con nada concreto: los 15 créditos se pueden usar en cualquier momento. |
+| **B. Vencen a los 7 días** | Coherente con el nombre de la oferta. Acota el costo de IA de cuentas inactivas e incentiva usar la prueba. Hay que avisar el vencimiento (ya existe la notificación "Tu período de prueba termina…"). |
+
+**Recomendación: B**, solo para las pruebas que se activen después del cambio, y con el vencimiento visible en la pantalla de planes.
+
+### Pregunta 2: Reembolso parcial: ¿revocación proporcional automática o revisión manual?
+Hoy se registra y se marca para revisión, sin tocar el plan.
+
+| Alternativa | Consecuencias |
+|---|---|
+| **A. Proporcional automática** (por ejemplo, 50% reembolsado → se revoca el 50% de lo otorgado, con tope en lo no usado) | Sin trabajo manual y predecible. Pero un reembolso parcial lo **inicia el propio vendedor** en Mercado Pago, a menudo como compensación (una caída del servicio, un error), y en ese caso no querría quitar créditos. |
+| **B. Revisión manual** (como hoy) | El operador decide según el motivo. Requiere mirar los pagos marcados (`payments` con `needsReview`); hoy no hay pantalla de administración para eso. |
+
+**Recomendación: B.** Los reembolsos parciales son poco frecuentes y deliberados. Los reembolsos **totales** y los contracargos siguen siendo automáticos.
+
+### Pregunta 3: Al vencer el plan, ¿sus créditos no usados se eliminan de inmediato o hay un margen?
+Hoy **no se eliminan**: al vencer, el plan pasa a "vencido" pero los créditos quedan.
+
+| Alternativa | Consecuencias |
+|---|---|
+| **A. Inmediato** | Coincide con "Plan activo por N días" y es fácil de explicar en los términos. Algún usuario puede perder créditos que no vio que vencían. |
+| **B. Margen de 3 días** | Menos reclamos. La regla es más difícil de explicar, y en la práctica el plan dura 3 días más. |
+| **C. Inmediato, pero si compra otro plan antes del vencimiento, los créditos no usados pasan al nuevo plan** | Incentiva la recompra y es favorable al usuario. Es algo más complejo (una regla más en la compra). |
+
+**Recomendación: A**, con aviso previo: la notificación "Tu plan termina pronto" ya existe (7 días antes) y la fecha de fin se ve al comprar y en la pantalla de éxito. Como opción posterior, C.
+
+### Pregunta 4: ¿Se ofrecen paquetes de créditos sueltos (`purchased`)?
+Hoy no existen. El modelo los soporta y nunca vencen (decisión 3).
+
+| Alternativa | Consecuencias |
+|---|---|
+| **A. No, por ahora** | Nada nuevo que fijar ni mantener. Quien necesite más créditos compra otro plan (con la decisión 2, los créditos se **suman**). |
+| **B. Sí** | Ingreso adicional sin cambiar los planes. Hay que definir producto y precio (**tu aprobación**). Los créditos que no vencen son un pasivo indefinido: si el costo de la IA sube, se siguen honrando al costo nuevo. |
+
+**Recomendación: A.** Dejarlo como opción para el comprador; el código ya lo contempla.
+
+### Dato relacionado (sin cambios: los precios no se tocan)
+Precio por crédito:
+- Mensual: $1.200 / 300 = **$4,00**
+- Trimestral: $4.200 / 1.000 = **$4,20**
+- Anual: $12.000 / 5.000 = **$2,40**
+
+**El Trimestral es más caro por crédito que el Mensual**, y comprar tres Mensuales ($3.600, 900 créditos) cuesta menos que un Trimestral. Por eso se quitaron los textos "¡Ahorrás $2.800!" y los precios tachados (`PHASE7_COMMERCIAL_BLOCKERS.md`). Revisar los precios es una decisión tuya.

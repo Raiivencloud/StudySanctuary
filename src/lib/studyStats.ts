@@ -7,7 +7,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 interface CourseLike { progress?: number; estimatedHours?: number }
 interface ActivityLike { title?: string; description?: string; timestamp?: number }
-interface ExamLike { id?: string; title?: string; date?: string; time?: string }
+interface ExamLike { id?: string; title?: string; date?: string; time?: string; reminder?: string }
 interface SubscriptionLike { status?: string; type?: string; planName?: string; subscriptionEndDate?: any; trialStartDate?: any }
 
 export interface StudyNotification {
@@ -19,6 +19,7 @@ export interface StudyNotification {
 }
 
 const TRIAL_DAYS = 7;
+const REMINDER_WINDOWS: Record<string, number> = { '1h': 60 * 60 * 1000, '2h': 2 * 60 * 60 * 1000, '1d': DAY, '2d': 2 * DAY };
 const DEFAULT_COURSE_HOURS = 10;
 
 /** Hours studied, estimated as each course's planned hours × its progress. One decimal. */
@@ -75,11 +76,13 @@ export function buildNotifications(input: { exams: ExamLike[]; subscription?: Su
   const now = input.now ?? Date.now();
   const notifications: StudyNotification[] = [];
 
-  // Exams in the next 3 days (dates are YYYY-MM-DD in the user's calendar)
+  // Exams: shown inside the app within the reminder chosen in the calendar (3 days for exams
+  // saved without one; "none" disables it). Dates are YYYY-MM-DD in the user's calendar.
   for (const exam of input.exams) {
-    if (!exam.date) continue;
+    if (!exam.date || exam.reminder === 'none') continue;
     const when = Date.parse(`${exam.date}T${exam.time || '00:00'}`);
-    if (!Number.isFinite(when) || localDay(when) < localDay(now) || when - now > 3 * DAY) continue;
+    const window = REMINDER_WINDOWS[exam.reminder || ''] ?? 3 * DAY;
+    if (!Number.isFinite(when) || when < now - 12 * 60 * 60 * 1000 || when - now > window) continue;
     notifications.push({
       id: `exam-${exam.id || exam.date}`, kind: 'exam', title: 'Examen próximo',
       message: `${exam.title || 'Examen'} ${inDays(when, now)}${exam.time ? ` a las ${exam.time}` : ''}.`, time: exam.date,

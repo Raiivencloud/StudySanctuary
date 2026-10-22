@@ -24,7 +24,14 @@ const OTHER_PLAYERS = [
 
 const DAY = 24 * 60 * 60 * 1000;
 const isoDate = (offsetDays: number) => new Date(Date.now() + offsetDays * DAY).toISOString().split("T")[0];
-const avatar = (seed: string) => `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}`;
+// Local initials avatar (data URI): the demo works offline and shows no third-party images
+const AVATAR_COLORS = ["#0891b2", "#7c3aed", "#059669", "#d97706", "#db2777"];
+const avatar = (seed: string, name = seed) => {
+  const initials = name.replace(/\(.*\)/, "").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "S";
+  const color = AVATAR_COLORS[[...seed].reduce((sum, c) => sum + c.charCodeAt(0), 0) % AVATAR_COLORS.length];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="${color}"/><text x="32" y="41" font-family="Arial,sans-serif" font-size="26" font-weight="700" fill="#fff" text-anchor="middle">${initials}</text></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+};
 
 export function assertDemoEnvironment(env: NodeJS.ProcessEnv = process.env) {
   for (const variable of ["FIRESTORE_EMULATOR_HOST", "FIREBASE_AUTH_EMULATOR_HOST", "FIREBASE_STORAGE_EMULATOR_HOST"]) {
@@ -42,14 +49,17 @@ export async function seedDemo(projectId = assertDemoEnvironment()) {
   const now = Timestamp.now();
 
   // --- Accounts (Google provider, so they appear in the emulator's Google sign-in page) ---
-  await auth.importUsers([DEMO_STUDENT, DEMO_ADMIN].map((user) => ({
+  // Auth only accepts http(s) photo URLs: the local avatar lives in the Firestore profile
+  const imported = await auth.importUsers([DEMO_STUDENT, DEMO_ADMIN].map((user) => ({
     uid: user.uid,
     email: user.email,
     emailVerified: true,
     displayName: user.displayName,
-    photoURL: avatar(user.uid),
-    providerData: [{ uid: `google-${user.uid}`, providerId: "google.com", email: user.email, displayName: user.displayName, photoURL: avatar(user.uid) }],
+    providerData: [{ uid: `google-${user.uid}`, providerId: "google.com", email: user.email, displayName: user.displayName }],
   })));
+  if (imported.failureCount > 0) {
+    throw new Error(`No se pudieron crear las cuentas demo: ${imported.errors.map((e) => e.error.message).join("; ")}`);
+  }
   await auth.setCustomUserClaims(DEMO_ADMIN.uid, { admin: true });
 
   const batch = db.batch();
@@ -57,7 +67,7 @@ export async function seedDemo(projectId = assertDemoEnvironment()) {
     uid: user.uid,
     displayName: user.displayName,
     email: user.email,
-    photoURL: avatar(user.uid),
+    photoURL: avatar(user.uid, user.displayName),
     bannerURL: "https://images.unsplash.com/photo-1516979187457-637abb4f9353?auto=format&fit=crop&w=1200&q=80",
     role: "user",
     createdAt: Timestamp.fromMillis(Date.now() - 40 * DAY),
@@ -147,18 +157,9 @@ export async function seedDemo(projectId = assertDemoEnvironment()) {
   // --- Arena: a populated ranking for the "Secundario" level ---
   for (const player of OTHER_PLAYERS) {
     batch.set(db.doc(`arena_rankings/Secundario_${player.uid}`), {
-      userId: player.uid, displayName: player.displayName, photoURL: avatar(player.uid), points: player.points, level: "Secundario", updatedAt: now,
+      userId: player.uid, displayName: player.displayName, photoURL: avatar(player.uid, player.displayName), points: player.points, level: "Secundario", updatedAt: now,
     });
   }
-
-  // --- Public reviews on the landing page, clearly labeled as examples ---
-  const reviews = [
-    { userName: "Reseña de ejemplo (demo)", rating: 5, message: "Los resúmenes y las flashcards me ahorran horas antes de cada parcial." },
-    { userName: "Reseña de ejemplo (demo)", rating: 4, message: "La Arena hace que repasar sea divertido." },
-  ];
-  reviews.forEach((review, i) => batch.set(db.doc(`feedback/demo-review-${i + 1}`), {
-    ...review, userId: OTHER_PLAYERS[i].uid, type: "opinion", isPublic: true, createdAt: Timestamp.fromMillis(Date.now() - (i + 2) * DAY),
-  }));
 
   // --- Global stats for the admin panel ---
   batch.set(db.doc("stats/global"), {
@@ -181,7 +182,7 @@ export async function seedDemo(projectId = assertDemoEnvironment()) {
     levelPoints: { Inicial: 0, Secundario: 412, Universidad: 0, Master: 0 }, collectibles: collectibleIds,
   });
   cards.set(db.doc(`arena_rankings/Secundario_${DEMO_STUDENT.uid}`), {
-    userId: DEMO_STUDENT.uid, displayName: DEMO_STUDENT.displayName, photoURL: avatar(DEMO_STUDENT.uid), points: 412, level: "Secundario", updatedAt: now,
+    userId: DEMO_STUDENT.uid, displayName: DEMO_STUDENT.displayName, photoURL: avatar(DEMO_STUDENT.uid, DEMO_STUDENT.displayName), points: 412, level: "Secundario", updatedAt: now,
   });
   await cards.commit();
 

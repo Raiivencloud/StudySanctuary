@@ -354,18 +354,15 @@ export const Dashboard: React.FC<{
                       </div>
                       <div>
                         <h4 className="text-3xl font-black text-white mb-3 uppercase tracking-tight">Explorador Estelar</h4>
-                        <p className="text-cyan-400 font-bold text-xs uppercase tracking-widest mb-4">Gemelo Digital 3D</p>
+                        <p className="text-cyan-400 font-bold text-xs uppercase tracking-widest mb-4">Mapa interactivo</p>
                         <p className="text-white/60 text-base leading-relaxed font-medium max-w-lg">
-                          Sumérgete en un modelo 3D interactivo de nuestro planeta, explorando datos geográficos y visualizaciones inmersivas.
+                          Explorá lugares del mundo en un mapa y conocé su información con IA.
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 mt-8">
                       <div className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold text-white/60 uppercase tracking-widest hover:bg-white/10 transition-all">
                         Explorar
-                      </div>
-                      <div className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold text-white/60 uppercase tracking-widest hover:bg-white/10 transition-all">
-                        Datos
                       </div>
                     </div>
                   </div>
@@ -416,9 +413,6 @@ export const Dashboard: React.FC<{
                 <Plus size={18} />
                 Nuevo Curso
               </motion.button>
-              <button className="text-sm font-medium text-white/40 hover:text-white transition-colors">
-                Ver Todos
-              </button>
             </div>
 
             <div className="grid grid-cols-1 gap-6">
@@ -563,9 +557,6 @@ export const Dashboard: React.FC<{
             </div>
             
             <div className="flex items-center gap-6">
-              <button className="w-12 h-12 flex items-center justify-center bg-white/5 border border-white/10 rounded-full text-white/40 hover:text-white transition-all">
-                <img src="https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png" alt="Drive" className="w-6 h-6 opacity-40" />
-              </button>
               <button 
                 onClick={toggleTimer}
                 className="w-14 h-14 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all"
@@ -591,12 +582,11 @@ export const Dashboard: React.FC<{
               <Sparkles size={24} />
             </div>
             <h3 className="text-xl font-bold text-white tracking-tight mb-2">Explorador Estelar</h3>
-            <p className="text-[10px] font-medium text-cyan-400 uppercase tracking-widest mb-6">Gemelo Digital 3D</p>
-            <p className="text-[10px] text-white/60 mb-8 leading-relaxed">Sumérgete en un modelo 3D interactivo de nuestro planeta, explorando datos geográficos y visualizaciones inmersivas.</p>
+            <p className="text-[10px] font-medium text-cyan-400 uppercase tracking-widest mb-6">Mapa interactivo</p>
+            <p className="text-[10px] text-white/60 mb-8 leading-relaxed">Explorá lugares del mundo en un mapa y conocé su información con IA.</p>
             
             <div className="flex gap-2">
               <button className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[8px] font-bold text-white/60 uppercase tracking-widest hover:bg-white/10 transition-all">Explorar</button>
-              <button className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[8px] font-bold text-white/60 uppercase tracking-widest hover:bg-white/10 transition-all">Datos</button>
             </div>
           </motion.div>
         </div>

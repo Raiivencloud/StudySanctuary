@@ -79,6 +79,11 @@ export const StudyGroupsView: React.FC = () => {
   const { user, loginWithGoogle, loginWithApple, loading: authLoading } = useAuth();
   const [myGroups, setMyGroups] = useState<Group[]>([]);
   const [availableGroups, setAvailableGroups] = useState<Group[]>([]);
+  const [groupSearch, setGroupSearch] = useState('');
+  const searchTerm = groupSearch.trim().toLowerCase();
+  const searchedGroups = searchTerm
+    ? availableGroups.filter(g => `${g.name} ${g.courseId} ${g.description}`.toLowerCase().includes(searchTerm))
+    : availableGroups;
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -358,6 +363,8 @@ export const StudyGroupsView: React.FC = () => {
               <input
                 type="text"
                 placeholder="Buscar grupos por nombre o curso..."
+                value={groupSearch}
+                onChange={(e) => setGroupSearch(e.target.value)}
                 className="w-full pl-12 pr-4 py-4 bg-card rounded-2xl border border-outline-variant/30 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-sm md:text-base"
               />
             </div>
@@ -370,8 +377,8 @@ export const StudyGroupsView: React.FC = () => {
               </h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-                {availableGroups.length > 0 ? (
-                  availableGroups.map(group => (
+                {searchedGroups.length > 0 ? (
+                  searchedGroups.map(group => (
                     <motion.div
                       key={group.id}
                       whileHover={{ y: -4 }}
@@ -381,10 +388,6 @@ export const StudyGroupsView: React.FC = () => {
                         <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-primary/10 text-primary rounded-md">
                           {group.courseId}
                         </span>
-                        <div className="flex items-center gap-1 text-on-surface-variant text-xs font-medium">
-                          <UserIcon className="w-3 h-3" />
-                          {group.memberCount || 1}
-                        </div>
                       </div>
                       <h3 className="text-lg font-bold text-on-surface mb-2">{group.name}</h3>
                       <p className="text-sm text-on-surface-variant line-clamp-2 mb-6 flex-1">
@@ -607,10 +610,6 @@ export const StudyGroupsView: React.FC = () => {
                   <div className="space-y-6">
                     <div className="flex justify-between items-center">
                       <h3 className="text-xl font-bold text-on-surface">Planes</h3>
-                      <button className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-all">
-                        <Plus className="w-4 h-4" />
-                        Agregar Plan
-                      </button>
                     </div>
                     <div className="flex flex-col items-center justify-center py-20 text-on-surface-variant opacity-40">
                       <Target className="w-12 h-12 mb-4" />

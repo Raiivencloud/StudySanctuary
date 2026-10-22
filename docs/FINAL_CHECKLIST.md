@@ -1,6 +1,6 @@
 # Lista de comprobación final
 
-Estado al **21/10/2026**, rama `phase6-commercial-readiness`.
+Estado al **22/10/2026**, rama `phase7-commercial-blockers`. Ver también [`SALE_READINESS_REPORT.md`](./SALE_READINESS_REPORT.md).
 
 **Leyenda:**
 - ✅ verificado con pruebas automáticas o en el navegador
@@ -22,8 +22,8 @@ Estado al **21/10/2026**, rama `phase6-commercial-readiness`.
 | A8 | Dashboard y notificaciones con datos reales; menú "Cursos" | ✅ (corregido en la Fase 6) | Navegador y unitarias |
 | A9 | Planes: pago único, checkout, aprobado, pendiente, rechazado, reembolso | ✅ simulado, 🟡 con **sandbox real** de Mercado Pago | Emulador y navegador |
 | A10 | Panel de administración (claim `admin`) | ✅ visible para la cuenta demo | Navegador |
-| A11 | Google Drive (listar, importar, subir) y Calendar | ✅ con APIs simuladas, 🟡 con Google real | Unitarias |
-| A12 | Asistente de voz | ⬜ **no está conectado a ninguna pantalla** (decidir: conectarlo o quitarlo) | Llamadas probadas en la Fase 4 |
+| A11 | Google Drive (permiso mínimo `drive.file`: subir y usar archivos de la app; el selector ya está conectado en Estudio IA) y Calendar | ✅ con APIs simuladas y navegador, 🟡 con Google real | Unitarias y navegador |
+| A12 | Asistente de voz | ⬜ **Experimental, desactivado** por decisión (una prueba impide mostrarlo) | Llamadas probadas en la Fase 4 |
 | A13 | Interfaz en móvil (375 px) sin scroll horizontal | ✅ IA y planes | Navegador |
 | A14 | Respuestas reales de Gemini (modelos de respaldo, voz) | 🟡 | Probar con una clave de desarrollo y presupuesto acotado |
 
@@ -60,9 +60,9 @@ Estado al **21/10/2026**, rama `phase6-commercial-readiness`.
 
 | # | Punto | Estado |
 |---|---|---|
-| D1 | Política de privacidad y términos reales (el modal actual tiene afirmaciones incorrectas) | ⛔ |
-| D2 | Testimonios fijos de la landing con nombres que no salen de reseñas reales | ⛔ reemplazar o quitar |
-| D3 | Beneficios de los planes no implementados ("Sin anuncios", "Soporte prioritario", "Velocidad Turbo"...) | ⛔ implementar o quitar |
+| D1 | Política de privacidad y términos | 🟡 **Borradores** fieles a la implementación, mostrados como preliminares. ⛔ Falta la revisión y aprobación profesional |
+| D2 | Testimonios inventados | ✅ Reemplazados por una presentación de funcionalidades (Fase 7) |
+| D3 | Promesas no implementadas y comparaciones de precio falsas | ✅ Quitadas en planes, landing, configuración, ayuda, libros y podcast (Fase 7; `commercialBlockers.test.ts`) |
 | D4 | Función para borrar la cuenta (derecho de supresión) | ⬜ no existe |
 | D5 | Licencias de recursos externos (SoundHelix, Unsplash...) y de `react-leaflet` (Hippocratic) | ⬜ revisión |
 | D6 | Facturación fiscal de los planes | ⬜ |
@@ -78,6 +78,6 @@ Estado al **21/10/2026**, rama `phase6-commercial-readiness`.
 | E4 | Mercado Pago del comprador (token, webhook y sandbox probado) | ⬜ |
 | E5 | Claim `admin` del comprador; quitar el del vendedor y su email de las reglas | ⬜ |
 | E6 | Dominio, Search Console, GTM (`VITE_GTM_ID`), Discord (`VITE_COMMUNITY_URL`), email de soporte | ⬜ |
-| E7 | Cliente OAuth de Google y verificación (CASA si se mantiene `drive.readonly`) | ⬜ |
+| E7 | Cliente OAuth de Google y verificación (sin CASA: solo `drive.file` y `calendar.readonly`) | ⬜ |
 | E8 | Quitar los accesos del vendedor (IAM, Firebase, GitHub) | ⬜ |
 | E9 | El comprador ejecuta `npm ci`, `npm run verify`, `npm run test:rules` y `npm run demo` en su máquina | ⬜ |

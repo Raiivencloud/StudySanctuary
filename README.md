@@ -38,7 +38,9 @@ npm run build && npm start
 | Tema | Documento |
 |---|---|
 | **Venta, instalación, transferencia, servicios, costos y licencias** | [`docs/SALE_AND_TRANSFER.md`](docs/SALE_AND_TRANSFER.md) |
+| **Estado para la venta (código fuente / SaaS / costos)** | [`docs/SALE_READINESS_REPORT.md`](docs/SALE_READINESS_REPORT.md) |
 | **Lista de comprobación final** | [`docs/FINAL_CHECKLIST.md`](docs/FINAL_CHECKLIST.md) |
+| Textos legales (borradores para revisión) | [`docs/legal/README.md`](docs/legal/README.md) |
 | Demo segura | [`docs/DEMO.md`](docs/DEMO.md) |
 | Configuración y variables | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md), `.env.example` |
 | Dependencias, vulnerabilidades y licencias | [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) |

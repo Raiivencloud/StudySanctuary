@@ -54,7 +54,7 @@ export const FeedbackView: React.FC = () => {
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-on-surface mb-2">Feedback</h1>
-        <p className="text-on-surface-variant">Tu opinión nos ayuda a mejorar Raiivencloud.</p>
+        <p className="text-on-surface-variant">Tu opinión nos ayuda a mejorar StudySanctuary.</p>
       </div>
 
       <motion.div 

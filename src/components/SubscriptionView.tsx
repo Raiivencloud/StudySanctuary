@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { hasUsedFreeTrial, updateSubscription } from '../services/userService';
 import { SUBSCRIPTION_PLANS } from '../constants';
 import { authFetch } from '../lib/authFetch';
+import { LegalModal, type LegalDocument } from './LegalModal';
 
 const PAYMENT_ERRORS: Record<string, string> = {
   UNAUTHENTICATED: 'Tu sesión expiró. Volvé a iniciar sesión.',
@@ -22,6 +23,7 @@ const SubscriptionView: React.FC = () => {
   const { user, userProfile, logout } = useAuth();
   const { t } = useLanguage();
   const [usedTrial, setUsedTrial] = useState(false);
+  const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -96,6 +98,7 @@ const SubscriptionView: React.FC = () => {
     }
   };
 
+  // Only what the code actually delivers (Phase 7): credits, duration and, for 90/365-day plans, a profile badge.
   const plans = [
     {
       id: 'prueba',
@@ -103,7 +106,7 @@ const SubscriptionView: React.FC = () => {
       price: '$0',
       period: '',
       offer: SUBSCRIPTION_PLANS.PRUEBA.description,
-      features: ['15 Créditos de IA de prueba', 'Acceso completo por 7 días'],
+      features: ['15 Créditos de IA de prueba', 'Se activa una sola vez por cuenta'],
       icon: Star,
       color: 'bg-emerald-500'
     },
@@ -113,7 +116,7 @@ const SubscriptionView: React.FC = () => {
       price: '$1.200',
       period: 'pago único · 30 días',
       offer: SUBSCRIPTION_PLANS.MENSUAL.description,
-      features: ['300 Créditos de IA', 'Plan activo por 30 días', 'Grupos de estudio ilimitados', 'Sin anuncios', 'Soporte prioritario'],
+      features: ['300 Créditos de IA', 'Plan activo por 30 días'],
       icon: Zap,
       color: 'bg-blue-500'
     },
@@ -121,28 +124,23 @@ const SubscriptionView: React.FC = () => {
       id: 'trimestral',
       name: SUBSCRIPTION_PLANS.TRIMESTRAL.name,
       price: '$4.200',
-      oldPrice: '$7.000',
       period: 'pago único · 90 días',
       offer: SUBSCRIPTION_PLANS.TRIMESTRAL.description,
-      features: ['1.000 Créditos de IA', 'Plan activo por 90 días', 'Insignia de Estudiante Destacado (Plata)', 'Acceso Prioritario'],
+      features: ['1.000 Créditos de IA', 'Plan activo por 90 días', 'Sello de Estudiante Destacado (plata) en tu perfil'],
       icon: Star,
-      color: 'bg-gray-400',
-      popular: true,
-      savings: '¡Ahorrás $2.800!'
+      color: 'bg-gray-400'
     },
     {
       id: 'anual',
       name: SUBSCRIPTION_PLANS.ANUAL.name,
       price: '$12.000',
-      oldPrice: '$18.000',
       period: 'pago único · 365 días',
       offer: SUBSCRIPTION_PLANS.ANUAL.description,
-      features: ['5.000 Créditos de IA', 'Plan activo por 365 días', 'Insignia Leyenda de Honor (Oro)', 'Velocidad Turbo', 'Soporte Preferencial'],
+      features: ['5.000 Créditos de IA', 'Plan activo por 365 días', 'Sello de Miembro de Honor (oro) en tu perfil'],
       icon: ShieldCheck,
-      color: 'bg-amber-500',
-      savings: '¡Ahorrás $6.000!'
+      color: 'bg-amber-500'
     }
-  ];
+  ] as { id: string; name: string; price: string; period: string; offer: string; features: string[]; icon: typeof Star; color: string; popular?: boolean }[];
 
   return (
     <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6 relative">
@@ -166,7 +164,7 @@ const SubscriptionView: React.FC = () => {
               Elige tu plan de estudio
             </h1>
             <p className="text-lg text-on-surface-variant max-w-2xl mx-auto">
-              Tu prueba gratuita ha finalizado o está por expirar. Continúa tu camino al éxito con Study Sanctuary Pro.
+              Cada plan suma créditos de IA por un período fijo. Se paga una sola vez con Mercado Pago.
             </p>
           </motion.div>
         </div>
@@ -180,11 +178,6 @@ const SubscriptionView: React.FC = () => {
               transition={{ delay: index * 0.1 }}
               className={`relative bg-surface-container-high rounded-3xl p-8 border ${plan.popular ? 'border-primary shadow-2xl scale-105 z-10' : 'border-outline-variant/10 shadow-xl'}`}
             >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-on-primary px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
-                  EL MÁS ELEGIDO
-                </div>
-              )}
               
               <div className={`w-12 h-12 ${plan.color} rounded-2xl flex items-center justify-center text-white mb-6`}>
                 <plan.icon size={24} />
@@ -194,9 +187,6 @@ const SubscriptionView: React.FC = () => {
               <p className="text-xs font-bold text-primary mb-4">{plan.offer}</p>
               <div className="mb-6">
                 <div className="flex items-center gap-2">
-                  {plan.oldPrice && (
-                    <span className="text-lg font-medium text-on-surface-variant/60 line-through">{plan.oldPrice}</span>
-                  )}
                   <span className="text-4xl font-extrabold text-on-surface">{plan.price}</span>
                 </div>
                 {/* One-time payment and its duration, on its own line so it never wraps next to the price */}
@@ -212,12 +202,6 @@ const SubscriptionView: React.FC = () => {
                 ))}
               </ul>
 
-              {plan.savings && (
-                <div className="absolute top-4 right-4 bg-emerald-500/20 text-emerald-600 px-3 py-1 rounded-full text-xs font-bold">
-                  {plan.savings}
-                </div>
-              )}
-
               <button
                 onClick={() => handleSubscribe(plan.id)}
                 disabled={plan.id === 'prueba' && usedTrial}
@@ -232,13 +216,14 @@ const SubscriptionView: React.FC = () => {
 
         <div className="mt-12 text-center">
           <p className="text-sm text-on-surface-variant opacity-80 max-w-2xl mx-auto mb-4">
-            1 Crédito = 1 Podcast, 1 set de ejercicios o 1 análisis de IA. El resto de la plataforma (biblioteca y comunidad) está incluido.
+            1 crédito = 1 acción de IA (un resumen, un podcast, un set de ejercicios, una respuesta del tutor…). Organizar cursos, calendario y tareas, las herramientas dentro de cada curso y los grupos de estudio no consumen créditos.
           </p>
           <p className="text-xs text-on-surface-variant opacity-60">
-            Todos los planes son pagos únicos con Mercado Pago: no hay renovación automática ni débitos recurrentes. Al terminar el período, podés volver a comprar cuando quieras. Al comprar, aceptás nuestros Términos de Servicio y Política de Privacidad.
+            Todos los planes son pagos únicos con Mercado Pago: no hay renovación automática ni débitos recurrentes. Al terminar el período, podés volver a comprar cuando quieras. Al comprar, aceptás los <button type="button" onClick={() => setLegalDocument('terms')} className="underline hover:text-on-surface">Términos</button> y la <button type="button" onClick={() => setLegalDocument('privacy')} className="underline hover:text-on-surface">Política de privacidad</button>.
           </p>
         </div>
       </div>
+      {legalDocument && <LegalModal initial={legalDocument} onClose={() => setLegalDocument(null)} />}
     </div>
   );
 };

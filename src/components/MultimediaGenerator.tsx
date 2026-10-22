@@ -360,11 +360,11 @@ export const MultimediaGenerator: React.FC = () => {
               <div className="p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-3 bg-white/5 rounded-2xl border border-white/5">
-                    <p className="text-[8px] font-bold text-cyan-400 uppercase tracking-widest mb-1">CLIMA</p>
+                    <p className="text-[8px] font-bold text-cyan-400 uppercase tracking-widest mb-1">CLIMA TÍPICO</p>
                     <p className="text-sm font-medium text-white">{selectedLocation.weather}</p>
                   </div>
                   <div className="p-3 bg-white/5 rounded-2xl border border-white/5">
-                    <p className="text-[8px] font-bold text-cyan-400 uppercase tracking-widest mb-1">HORA LOCAL</p>
+                    <p className="text-[8px] font-bold text-cyan-400 uppercase tracking-widest mb-1">HORA APROX.</p>
                     <p className="text-sm font-medium text-white">{selectedLocation.localTime}</p>
                   </div>
                 </div>

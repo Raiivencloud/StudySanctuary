@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -35,14 +35,29 @@ import { toast } from 'sonner';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { COMMUNITY_URL } from '../config/brand';
+import { LegalModal, type LegalDocument } from './LegalModal';
+import { useCourses } from '../contexts/CourseContext';
+import { summarizePlan } from '../lib/planSummary';
+import { getUserCredits } from '../services/userService';
 
 export const SettingsView: React.FC = () => {
   const { user, userProfile, logout, updateProfile } = useAuth();
   const { language, setLanguage } = useLanguage();
   const { theme, toggleTheme, wallpaper, setWallpaper } = useTheme();
-  const [profilePic, setProfilePic] = useState(userProfile?.photoURL || user?.photoURL || "https://lh3.googleusercontent.com/aida-public/AB6AXuCkBia4OQbd5xt2ohXN2KjGKrIb4XmLzn0liM3RZdJGDOOBjeht7X1UYaRWSYGK3jnIdNxIFPKkMvIsZPamnZ9uQ663BHw7tY354ld5iUW0n69akoBbJ_mmlCKV0nYg-JEQNCdxN-cmUR5PaZHuIq_0uL_MJdA51pAajEbXsSxJ9G26xyRgBITM3dtUT5FuXSv6fr3ACe5h9DEAHJ26lYkG8tSpACNg1bjGzMuw6jAsuuW30T34Mu3sc9sWYtE74NuDPMGY9KcUV0UF");
+  const [profilePic, setProfilePic] = useState(userProfile?.photoURL || user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid || "estudiante"}`);
   const [bannerPic, setBannerPic] = useState(userProfile?.bannerURL || "https://images.unsplash.com/photo-1516979187457-637abb4f9353?auto=format&fit=crop&w=1200&q=80");
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null);
+  // Real figures (they used to be fixed: "12 cursos", "85%", "Plan de Prueba")
+  const { courses } = useCourses();
+  const averageProgress = courses.length ? Math.round(courses.reduce((sum, c) => sum + (c.progress || 0), 0) / courses.length) : 0;
+  const plan = summarizePlan(userProfile?.subscription);
+  const [credits, setCredits] = useState(0);
+  useEffect(() => {
+    if (user) getUserCredits(user.uid).then((data) => setCredits(data.credits)).catch(() => undefined);
+    const onCredits = (event: any) => { if (typeof event.detail?.credits === 'number') setCredits(event.detail.credits); };
+    window.addEventListener('creditsUpdated', onCredits);
+    return () => window.removeEventListener('creditsUpdated', onCredits);
+  }, [user]);
   const [isUpdatingWallpaper, setIsUpdatingWallpaper] = useState(false);
   const [customWallpaperUrl, setCustomWallpaperUrl] = useState('');
   const [showUrlInput, setShowUrlInput] = useState(false);
@@ -209,18 +224,20 @@ export const SettingsView: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-full text-xs font-bold uppercase tracking-wider">
-              <Shield size={14} />
-              Cuenta Verificada
-            </div>
+            {user?.emailVerified && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-full text-xs font-bold uppercase tracking-wider">
+                <Shield size={14} />
+                Email verificado
+              </div>
+            )}
 
             <div className="w-full px-8 pt-6 border-t border-outline-variant/5 grid grid-cols-2 gap-4">
               <div className="text-center">
-                <p className="text-2xl font-bold text-primary">12</p>
+                <p className="text-2xl font-bold text-primary">{courses.length}</p>
                 <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Cursos</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-secondary">85%</p>
+                <p className="text-2xl font-bold text-secondary">{averageProgress}%</p>
                 <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Progreso</p>
               </div>
             </div>
@@ -229,17 +246,8 @@ export const SettingsView: React.FC = () => {
           <div className="bg-card backdrop-blur-xl p-6 rounded-3xl border border-outline-variant/10 space-y-4 shadow-xl">
             <h4 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant">Seguridad</h4>
             <div className="space-y-2">
-              <button 
-                onClick={() => setShowPasswordModal(true)}
-                className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-surface-container transition-all group"
-              >
-                <div className="flex items-center gap-3 text-on-surface">
-                  <Lock size={20} className="text-primary" />
-                  <span className="font-medium">Contraseña</span>
-                </div>
-                <ChevronRight size={18} className="text-on-surface-variant group-hover:translate-x-1 transition-transform" />
-              </button>
-              <button className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-surface-container transition-all group">
+
+              <button onClick={() => setLegalDocument('privacy')} className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-surface-container transition-all group">
                 <div className="flex items-center gap-3 text-on-surface">
                   <Shield size={20} className="text-primary" />
                   <span className="font-medium">Privacidad de la cuenta</span>
@@ -275,33 +283,23 @@ export const SettingsView: React.FC = () => {
                       <Zap size={32} />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-primary uppercase tracking-widest">Plan de Prueba</p>
-                      <h4 className="text-3xl font-bold text-on-surface font-headline">7 Días Gratis</h4>
+                      <p className="text-sm font-bold text-primary uppercase tracking-widest">{plan.isPaid ? 'Plan pago' : 'Plan'}</p>
+                      <h4 className="text-3xl font-bold text-on-surface font-headline">{plan.title}</h4>
                     </div>
                   </div>
 
                   <div className="space-y-4">
-                    <p className="text-on-surface-variant leading-relaxed">
-                      Disfruta de todas las funciones premium de Study Sanctuary sin costo durante tus primeros 7 días. 
-                      Al finalizar el periodo de prueba, podrás elegir el plan que mejor se adapte a tus necesidades.
-                    </p>
-                    
+                    <p className="text-on-surface-variant leading-relaxed">{plan.detail}</p>
                     <div className="flex flex-wrap gap-3">
                       <div className="px-4 py-2 bg-surface-container rounded-full text-xs font-bold text-on-surface-variant border border-outline-variant/10">
-                        IA Ilimitada
-                      </div>
-                      <div className="px-4 py-2 bg-surface-container rounded-full text-xs font-bold text-on-surface-variant border border-outline-variant/10">
-                        Grupos de Estudio
-                      </div>
-                      <div className="px-4 py-2 bg-surface-container rounded-full text-xs font-bold text-on-surface-variant border border-outline-variant/10">
-                        Sincronización Drive
+                        {credits} créditos disponibles
                       </div>
                     </div>
                   </div>
 
                   <div className="pt-4">
                     <button 
-                      onClick={() => window.location.href = '/subscription'}
+                      onClick={() => window.location.assign('/?view=subscription')}
                       className="w-full sm:w-auto px-8 py-4 bg-primary text-on-primary rounded-2xl font-bold hover:scale-105 transition-all shadow-lg shadow-primary/20"
                     >
                       Ver Planes Disponibles
@@ -324,7 +322,6 @@ export const SettingsView: React.FC = () => {
                     <h3 className="text-2xl font-bold text-on-surface font-headline">Diseño del Santuario</h3>
                   </div>
                 </div>
-                <div className="px-4 py-1.5 bg-gradient-to-r from-primary via-secondary to-tertiary text-on-primary rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-secondary/20 animate-pulse">Premium</div>
               </div>
               
               <div className="space-y-10">
@@ -447,8 +444,7 @@ export const SettingsView: React.FC = () => {
                     <div className="flex flex-wrap gap-2">
                       {[
                         { code: 'es', label: 'Español' },
-                        { code: 'en', label: 'English' },
-                        { code: 'pt', label: 'Português' }
+                        { code: 'en', label: 'English' }
                       ].map((lang) => (
                         <button 
                           key={lang.code}
@@ -501,30 +497,6 @@ export const SettingsView: React.FC = () => {
 
             <div className="h-px bg-outline-variant/10 w-full" />
 
-            <section className="space-y-6">
-              <h4 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant">Notificaciones</h4>
-              
-              <div className="space-y-4">
-                {[
-                  { id: 'exams', label: 'Recordatorios de exámenes', desc: 'Recibe alertas 24h antes de tus exámenes' },
-                  { id: 'study', label: 'Sesiones de estudio', desc: 'Notificaciones para tus bloques de estudio programados' },
-                  { id: 'ai', label: 'Sugerencias de IA', desc: 'Nuevos resúmenes y planes generados' }
-                ].map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-4 rounded-2xl bg-surface-container/30 border border-outline-variant/10">
-                    <div className="space-y-0.5">
-                      <p className="font-bold text-on-surface">{item.label}</p>
-                      <p className="text-[11px] text-on-surface-variant">{item.desc}</p>
-                    </div>
-                    <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-primary/20 cursor-pointer">
-                      <span className="inline-block h-4 w-4 transform rounded-full bg-primary transition translate-x-6" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <div className="h-px bg-outline-variant/10 w-full" />
-
             <section className="space-y-8">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-primary/10 text-primary rounded-2xl shadow-inner">
@@ -559,54 +531,7 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
       </div>
-      {/* Password Modal */}
-      <AnimatePresence>
-        {showPasswordModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-card backdrop-blur-2xl border border-outline-variant/10 rounded-3xl w-[95%] max-w-md p-8 shadow-2xl"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-bold font-headline text-on-surface">Contraseña</h3>
-                <button onClick={() => setShowPasswordModal(false)} className="text-on-surface-variant hover:text-on-surface">
-                  <X size={24} />
-                </button>
-              </div>
-              <div className="space-y-4">
-                <p className="text-sm text-on-surface-variant">Para mayor seguridad, puedes establecer una contraseña para tu cuenta de Study Sanctuary.</p>
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-1 block">Nueva Contraseña</label>
-                  <input 
-                    type="password"
-                    className="w-full bg-surface-container border border-outline-variant/10 rounded-xl p-3 outline-none focus:border-primary transition-all text-on-surface"
-                    placeholder="••••••••"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-1 block">Confirmar Contraseña</label>
-                  <input 
-                    type="password"
-                    className="w-full bg-surface-container border border-outline-variant/10 rounded-xl p-3 outline-none focus:border-primary transition-all text-on-surface"
-                    placeholder="••••••••"
-                  />
-                </div>
-                <button 
-                  onClick={() => {
-                    toast.success('Contraseña actualizada');
-                    setShowPasswordModal(false);
-                  }}
-                  className="w-full py-4 bg-primary text-on-primary rounded-xl font-bold mt-4 shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
-                >
-                  Guardar Cambios
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {legalDocument && <LegalModal initial={legalDocument} onClose={() => setLegalDocument(null)} />}
     </div>
   );
 };

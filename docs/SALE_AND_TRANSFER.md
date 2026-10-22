@@ -18,7 +18,7 @@ Guía para quien compra StudySanctuary y para el traspaso desde el propietario a
 |---|---|
 | Cuentas de terceros (Google Cloud o Firebase, Mercado Pago, Google Tag Manager, Discord, dominio) | Son del propietario. Se **transfieren** (Google Cloud, dominio) o se **reemplazan** (Mercado Pago es personal o de la empresa) |
 | Datos de usuarios | Su transferencia depende de la ley de datos personales (en Argentina, Ley 25.326) y de la política de privacidad aceptada por los usuarios. **Requiere asesoramiento legal.** |
-| Textos legales | No existen términos de uso ni política de privacidad reales (sección 7) |
+| Textos legales aprobados | Hay **borradores** de privacidad y términos, que la app muestra como preliminares. Deben revisarlos y completarlos un abogado (sección 7). |
 
 ## 2. Arquitectura
 
@@ -46,7 +46,7 @@ La IA y el saldo los controla **solo el servidor**. El cliente no tiene claves p
 | **Google Cloud / Firebase** (Auth, Firestore, Storage, Cloud Run) | Todo el backend | Sí | Nivel gratuito y después pago por uso (ver abajo) | Transferir el proyecto o crear uno nuevo |
 | **Gemini API** | Toda la IA | Sí, para la IA | Por tokens. Es **el costo principal** | Clave del servidor en Secret Manager |
 | **Mercado Pago** | Cobro de planes | Para vender planes | Comisión por cobro (según medio y plazo de acreditación) | **Cuenta propia del comprador** |
-| Google OAuth (Drive y Calendar) | Integraciones opcionales | No | Gratis. Con `drive.readonly`, la **evaluación CASA** anual tiene costo (sección 3.3) | Cliente OAuth propio |
+| Google OAuth (Drive y Calendar) | Integraciones opcionales | No | Gratis. Permiso mínimo `drive.file`: sin evaluación CASA (sección 3.3) | Cliente OAuth propio |
 | Microsoft Entra (Outlook Calendar) | Integración opcional | No | Gratis | App propia |
 | Google Tag Manager | Analítica | No | Gratis | Contenedor propio (`VITE_GTM_ID`) o `off` |
 | Discord | Enlace de comunidad | No | Gratis | `VITE_COMMUNITY_URL` |
@@ -79,12 +79,11 @@ Controles disponibles:
 
 Configurar además **alertas de presupuesto** en Google Cloud.
 
-### 3.3 Google Drive: permiso restringido
-`GOOGLE_DRIVE_ACCESS=all`, el valor por defecto que mantiene el comportamiento actual, pide `drive.readonly`, un permiso **restringido**:
-- para que la pantalla de consentimiento no diga "app no verificada" hay que aprobar la verificación de Google **y una evaluación de seguridad CASA anual**;
-- según Google, el evaluador cobra entre US$ 500 y 4.500 según la complejidad, y lleva varias semanas.
-
-Con `GOOGLE_DRIVE_ACCESS=app` solo se pide `drive.file`, un permiso no sensible: la app lista los archivos que el usuario subió o abrió desde StudySanctuary, y **no necesita CASA**. Calendar (`calendar.readonly`) es un permiso sensible: requiere verificación, pero no CASA.
+### 3.3 Google Drive: permiso mínimo
+Desde la Fase 7, la app pide solo `drive.file`, un permiso no sensible: ve **únicamente los archivos que el usuario sube o abre desde StudySanctuary**.
+- **No necesita la evaluación de seguridad CASA** de Google. Esa evaluación sí haría falta con `drive.readonly`, un permiso restringido que se eliminó: el evaluador cobra entre US$ 500 y 4.500 por año, según Google.
+- Calendar (`calendar.readonly`) es un permiso sensible: requiere la verificación de Google, pero no CASA.
+- Si el comprador quisiera abrir archivos que ya existen en el Drive del usuario, la vía compatible con `drive.file` es **Google Picker** (no implementado).
 
 ### 3.4 Mercado Pago
 Las comisiones dependen del medio de pago y del plazo de acreditación. No se pudo confirmar la tabla oficial vigente de Checkout Pro para Argentina; las fuentes de terceros mencionan alrededor de **6,29% + IVA** con tarjeta de crédito y acreditación inmediata. Verificarlo en la cuenta del comprador.
@@ -104,7 +103,7 @@ Las comisiones dependen del medio de pago y del plazo de acreditación. No se pu
    - `MERCADOPAGO_ACCESS_TOKEN` y `MERCADOPAGO_WEBHOOK_SECRET`;
    - `GOOGLE_CLIENT_SECRET` y `OUTLOOK_CLIENT_SECRET` si se usan;
    - `ADMIN_SECRET_KEY`.
-6. **Variables:** `APP_URL`, `FIREBASE_PROJECT_ID`, `FIREBASE_DATABASE_ID` (la **misma** base que `VITE_FIREBASE_FIRESTORE_DATABASE_ID`), `AI_PROXY_ENABLED=true`, `ADMIN_EMAILS`, `GOOGLE_CLIENT_ID`, `GOOGLE_DRIVE_ACCESS`, `OUTLOOK_CLIENT_ID`, `VITE_GTM_ID` y `VITE_COMMUNITY_URL`. Ver [`CONFIGURATION.md`](./CONFIGURATION.md) y `.env.example`, y verificar con `npm run verify:config -- --production`.
+6. **Variables:** `APP_URL`, `FIREBASE_PROJECT_ID`, `FIREBASE_DATABASE_ID` (la **misma** base que `VITE_FIREBASE_FIRESTORE_DATABASE_ID`), `AI_PROXY_ENABLED=true`, `ADMIN_EMAILS`, `GOOGLE_CLIENT_ID`, `OUTLOOK_CLIENT_ID`, `VITE_GTM_ID` y `VITE_COMMUNITY_URL`. Ver [`CONFIGURATION.md`](./CONFIGURATION.md) y `.env.example`, y verificar con `npm run verify:config -- --production`.
 7. **Despliegue:** `gcloud run deploy study-sanctuary --source . --region <región>` (buildpacks con Node 22; usa `npm run build` y `npm start`), o con una imagen y `cloud-run.yaml`. Mantener **1 instancia** máxima mientras las sesiones y los tokens de integración estén en memoria (`SESSIONS_LOW_COST.md`).
 8. **Administrador:** `npx tsx scripts/ops/admin-claims.ts --project <id> --grant <email>` (guía en `docs/ops/README.md`).
 9. **Mercado Pago:**
@@ -143,18 +142,16 @@ Las comisiones dependen del medio de pago y del plazo de acreditación. No se pu
 | Discord `discord.gg/Y5yFKEYD9r` | `src/config/brand.ts` | `VITE_COMMUNITY_URL` |
 | Verificación de Search Console | `googledf62f517e836fc32.html` | Borrar y generar la propia |
 | Marca: nombre, logo, colores, `manifest.json`, `metadata.json` (de AI Studio) | `public/`, `index.html`, `metadata.json` | Según la marca del comprador |
-| Testimonios fijos de la landing (personas con nombre) | `src/components/LandingView.tsx` (`testimonials`) | **Reemplazar** por reseñas reales moderadas (`FeaturedFeedback` ya existe) o quitarlos |
-| Textos legales (privacidad y términos) | Modal de `LandingView.tsx` | **Redactarlos con un abogado** (sección 7) |
-| Beneficios de los planes no implementados ("Sin anuncios", "Soporte prioritario", "Velocidad Turbo", "Acceso prioritario", "Grupos ilimitados") | `src/components/SubscriptionView.tsx` | Implementarlos o quitarlos |
+| Presentación de funcionalidades de la landing (reemplazó a testimonios inventados en la Fase 7) | `src/components/LandingView.tsx` (`testimonials`) | Opcional: sumar **reseñas reales** moderadas (`FeaturedFeedback` ya existe) |
+| Textos legales (borradores) | `src/legal/privacy.md`, `src/legal/terms.md` y las variables `VITE_LEGAL_*` | **Revisión profesional** y `VITE_LEGAL_TEXTS_APPROVED=true` (sección 7) |
+| Capturas de la landing | `public/assets/screens/*.jpg` (capturas reales de la demo) | Actualizarlas si cambia la marca |
 | Recursos externos (imágenes de Unsplash y Picsum, música de SoundHelix, texturas) | `App`, `LandingView`, `ArenaView`, `BooksView`, `MultimediaGenerator`, `SettingsView`, `AuthContext`, `MusicContext`, `arenaService`, `constants/arenaCards` | Verificar licencias y **alojarlos** en el propio dominio |
 | Cuentas y credenciales de servicios | Variables y secretos | Ver la sección 4 |
 
 ## 7. Aspectos legales que el comprador debe resolver (no técnicos)
 
-- **Política de privacidad y términos:** el modal actual no es un texto legal y contiene afirmaciones **incorrectas**:
-  - dice que se usa **"encriptación end-to-end"** (los datos están en Firestore, legibles por el servidor);
-  - promete que los datos no se usan para entrenar modelos (depende del plan de Gemini contratado: en el nivel gratuito, Google puede usar los datos);
-  - ofrece la "erradicación total" de los datos, pero la app **no tiene** una función para borrar la cuenta.
+- **Política de privacidad y términos:** hay **borradores** escritos según el funcionamiento real ([`legal/README.md`](./legal/README.md)), con los puntos que debe definir un abogado marcados como pendientes: responsable, reembolsos y arrepentimiento, menores, conservación, jurisdicción, analítica y cookies. La app los muestra con el aviso "versión preliminar" hasta su aprobación. Las afirmaciones falsas anteriores (cifrado "end-to-end", "erradicación total") se eliminaron.
+- **Brechas que afectan a los textos** ([`legal/DATA_INVENTORY.md`](./legal/DATA_INVENTORY.md)): no hay borrado ni exportación de la cuenta desde la app, ni verificación de edad, ni banner de cookies.
 - **Datos personales:** la base tiene emails, nombres, apuntes y archivos de estudiantes, posiblemente **menores** (nivel "Inicial" y "Secundario"). Consentimiento, derechos de acceso y borrado, y registro de la base según la normativa aplicable.
 - **Contenido generado por IA** y uso de documentos de los usuarios: revisar las condiciones de Gemini API.
 - **Origen del código:** el proyecto se inició con Google AI Studio (`metadata.json`, `firebase-blueprint.json`). Confirmar los derechos sobre el código según los términos aplicables.

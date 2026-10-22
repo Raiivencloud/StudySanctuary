@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 // Componentes con llaves para evitar errores de importación
 import LandingView from './components/LandingView';
 import { DemoLogin } from './components/DemoBanner';
+import { DrivePickerModal } from './components/DrivePickerModal';
 import { COMMUNITY_URL, gtmContainerId } from './config/brand';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -51,6 +52,9 @@ export default function App() {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const { theme, wallpaper } = useTheme();
   const { isAdmin } = useAuth();
+  // Google Drive (minimal drive.file scope): pick or upload a file for the AI study tools
+  const [isDrivePickerOpen, setIsDrivePickerOpen] = useState(false);
+  const [driveFile, setDriveFile] = useState<{ name: string; data?: string; text?: string; mimeType: string } | null>(null);
 
   useEffect(() => {
     // Check for version update to clear cache
@@ -137,6 +141,7 @@ export default function App() {
       </div>
 
       <Toaster position="top-right" theme={theme} richColors closeButton />
+      <DrivePickerModal isOpen={isDrivePickerOpen} onClose={() => setIsDrivePickerOpen(false)} onFileSelect={setDriveFile} />
       <TrafficAlert />
       {gtmContainerId() && <GoogleTagManager gtmId={gtmContainerId()!} />}
       
@@ -214,7 +219,7 @@ export default function App() {
                       onViewChange={setCurrentView}
                     />
                   )}
-                  {currentView === 'ai' && <AIStudyView initialTab={studyTab} />}
+                  {currentView === 'ai' && <AIStudyView initialTab={studyTab} onDriveClick={() => setIsDrivePickerOpen(true)} driveFile={driveFile} />}
                   {currentView === 'exams' && <AIStudyView initialTab="exam" />}
                   {currentView === 'exercises' && <AIStudyView initialTab="exercises" />}
                   {currentView === 'diagrams' && <AIStudyView initialTab="diagram" />}

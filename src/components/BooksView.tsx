@@ -209,13 +209,14 @@ export const BooksView: React.FC = () => {
       const ai = getAI(newAiAction('books'));
       const result = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [{ parts: [{ text: `Proporciona el texto ÍNTEGRO, EXTENSO y COMPLETO del capítulo ${chapterIndex + 1} del libro "${book.title}" de ${book.author}. 
-        Es fundamental que el texto sea extremadamente detallado, cubriendo absolutamente todo el contenido del capítulo original, sin omitir diálogos ni descripciones. 
-        Si el libro no tiene capítulos numerados, proporciona una sección muy extensa de aproximadamente 3000 a 4000 palabras que continúe la historia de forma coherente.
-        Idioma: ${language === 'es' ? 'Español' : 'Inglés'}.
-        IMPORTANTE: Devuelve ÚNICAMENTE el texto del libro en formato Markdown, sin introducciones, resúmenes ni comentarios del asistente. No resumas, proporciona el texto completo.` }] }],
+        // A study guide, never the book's text: reproducing copyrighted works would be invented by the
+        // model and could infringe copyright (Phase 7)
+        contents: [{ parts: [{ text: `Escribí una guía de estudio del capítulo ${chapterIndex + 1} del libro "${book.title}" de ${book.author}.
+        Incluí: un resumen con tus propias palabras, personajes o ideas principales, temas, contexto y 3 preguntas para repasar.
+        No reproduzcas el texto original del libro ni transcribas fragmentos extensos. Si no estás seguro del contenido de ese capítulo, decilo.
+        Idioma: ${language === 'es' ? 'Español' : 'Inglés'}. Formato Markdown.` }] }],
         config: {
-          systemInstruction: "Eres un transcriptor de libros. Tu única tarea es devolver el texto íntegro del libro solicitado. No añadas saludos, resúmenes, glosarios ni ningún tipo de comentario adicional. Solo el texto del libro."
+          systemInstruction: "Sos un tutor de literatura. Escribís guías de lectura originales y nunca reproducís el texto de obras protegidas."
         }
       });
 
@@ -362,16 +363,9 @@ export const BooksView: React.FC = () => {
                   referrerPolicy="no-referrer"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-6">
-                  <div className="flex items-center gap-2 text-white mb-2">
-                    <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                    <span className="text-sm font-bold">{book.rating}</span>
-                  </div>
                   <button className="w-full py-3 bg-white text-black rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-primary hover:text-white transition-all">
                     Leer Resumen
                   </button>
-                </div>
-                <div className="absolute top-4 right-4 p-2 bg-white/20 backdrop-blur-md rounded-xl text-white opacity-0 group-hover:opacity-100 transition-all">
-                  <Bookmark size={18} />
                 </div>
               </div>
               
@@ -443,9 +437,9 @@ export const BooksView: React.FC = () => {
 
                 <div className="grid grid-cols-3 gap-4">
                   <div className="p-4 bg-surface-container-low rounded-2xl text-center space-y-1">
-                    <Star className="w-5 h-5 text-yellow-400 fill-yellow-400 mx-auto" />
-                    <p className="text-sm font-bold text-on-surface">{selectedBook.rating}</p>
-                    <p className="text-[10px] uppercase tracking-widest opacity-40">Rating</p>
+                    <Layers className="w-5 h-5 text-primary mx-auto" />
+                    <p className="text-sm font-bold text-on-surface">{selectedBook.category}</p>
+                    <p className="text-[10px] uppercase tracking-widest opacity-40">Género</p>
                   </div>
                   <div className="p-4 bg-surface-container-low rounded-2xl text-center space-y-1">
                     <Clock className="w-5 h-5 text-primary mx-auto" />
@@ -507,13 +501,7 @@ export const BooksView: React.FC = () => {
                     className="flex-1 py-4 bg-primary text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
                   >
                     <BookOpen size={20} />
-                    Leer Libro
-                  </button>
-                  <button className="p-4 bg-surface-container-high text-on-surface rounded-2xl hover:bg-surface-variant transition-all">
-                    <Heart size={20} />
-                  </button>
-                  <button className="p-4 bg-surface-container-high text-on-surface rounded-2xl hover:bg-surface-variant transition-all">
-                    <Headphones size={20} />
+                    Guía por capítulos
                   </button>
                 </div>
               </div>
@@ -545,25 +533,18 @@ export const BooksView: React.FC = () => {
                     <p className="text-xs text-on-surface-variant opacity-60">{selectedBook.author}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button className="p-2 hover:bg-surface-variant rounded-full transition-all">
-                    <Bookmark size={20} />
-                  </button>
-                  <button className="p-2 hover:bg-surface-variant rounded-full transition-all">
-                    <Settings size={20} />
-                  </button>
-                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-8 sm:p-12 md:p-20 font-serif leading-relaxed text-lg sm:text-xl text-on-surface max-w-3xl mx-auto space-y-8">
                 {isLoadingContent ? (
                   <div className="flex flex-col items-center justify-center py-40 space-y-4">
                     <Loader2 className="w-12 h-12 text-primary animate-spin" />
-                    <p className="text-sm text-on-surface-variant font-medium animate-pulse">Cargando capítulo...</p>
+                    <p className="text-sm text-on-surface-variant font-medium animate-pulse">Generando la guía del capítulo...</p>
                   </div>
                 ) : (
                   <>
-                    <h1 className="text-4xl sm:text-5xl font-bold font-headline mb-12 text-center">Capítulo {currentPage + 1}</h1>
+                    <h1 className="text-4xl sm:text-5xl font-bold font-headline mb-4 text-center">Guía del capítulo {currentPage + 1}</h1>
+                    <p className="text-xs text-on-surface-variant text-center mb-12">Guía generada con IA: puede contener errores y no reemplaza la lectura del libro.</p>
                     <div className="prose prose-lg dark:prose-invert max-w-none">
                       <ReactMarkdown>{readingContent[currentPage]}</ReactMarkdown>
                     </div>

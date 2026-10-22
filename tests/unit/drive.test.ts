@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import session from "express-session";
 import { createIntegrationsRouter, DRIVE_LIST_QUERY, type HttpClient } from "../../server/routes/integrations";
-import { createOAuthRouter, googleScopes, normalizeOAuthTokens } from "../../server/routes/oauth";
+import { createOAuthRouter, GOOGLE_SCOPES, normalizeOAuthTokens } from "../../server/routes/oauth";
 import { InMemoryTokenStore } from "../../server/integrations/tokenStore";
 import { loadServerConfig } from "../../server/config";
 import { withApp, fakeVerifyIdToken } from "../helpers/http";
@@ -41,29 +41,25 @@ function driveApp(options: { now?: () => number; googleFails?: number; files?: R
   return { app, calls, tokens };
 }
 
-test("D-1/D-7: upload scope is requested; reading the whole Drive is configurable", () => {
-  assert.equal(googleScopes("all"), "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file");
-  assert.equal(googleScopes("app"), "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.file");
-  assert.equal(loadServerConfig({ FIREBASE_PROJECT_ID: "p" }).integrations.googleDriveAccess, "all");
-  assert.equal(loadServerConfig({ FIREBASE_PROJECT_ID: "p", GOOGLE_DRIVE_ACCESS: "app" }).integrations.googleDriveAccess, "app");
-  assert.throws(() => loadServerConfig({ FIREBASE_PROJECT_ID: "p", GOOGLE_DRIVE_ACCESS: "everything" }));
-});
+test("D-1/D-7: minimal scopes only: drive.file (upload and app files) and Calendar read-only, never drive.readonly", async () => {
+  assert.equal(GOOGLE_SCOPES, "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.file");
+  assert.doesNotMatch(GOOGLE_SCOPES, /drive\.readonly|auth\/drive( |$)/);
+  // The old full-read option is refused instead of silently ignored
+  assert.throws(() => loadServerConfig({ FIREBASE_PROJECT_ID: "p", GOOGLE_DRIVE_ACCESS: "all" }), /ya no se admite/);
+  assert.doesNotThrow(() => loadServerConfig({ FIREBASE_PROJECT_ID: "p" }));
 
-test("D-1: the authorization URL asks for the configured scopes", async () => {
-  for (const access of ["all", "app"] as const) {
-    const app = express();
-    app.use(express.json());
-    app.use(session({ secret: "s", resave: false, saveUninitialized: false }));
-    app.use(createOAuthRouter({
-      auth: { verifyIdToken: fakeVerifyIdToken }, tokens: new InMemoryTokenStore(60_000), appUrl: "https://app.example.com",
-      google: { clientId: "g" }, outlook: {}, sessionCookie: { name: "connect.sid", secure: false, sameSite: "lax" }, googleDriveAccess: access,
-    }));
-    await withApp(app, async (base) => {
-      const { url } = await (await fetch(`${base}/api/auth/google/url`, { headers: bearer("token-user") })).json();
-      assert.equal(new URL(url).searchParams.get("scope"), googleScopes(access));
-      assert.equal(new URL(url).searchParams.get("access_type"), "offline");
-    });
-  }
+  const app = express();
+  app.use(express.json());
+  app.use(session({ secret: "s", resave: false, saveUninitialized: false }));
+  app.use(createOAuthRouter({
+    auth: { verifyIdToken: fakeVerifyIdToken }, tokens: new InMemoryTokenStore(60_000), appUrl: "https://app.example.com",
+    google: { clientId: "g" }, outlook: {}, sessionCookie: { name: "connect.sid", secure: false, sameSite: "lax" },
+  }));
+  await withApp(app, async (base) => {
+    const { url } = await (await fetch(`${base}/api/auth/google/url`, { headers: bearer("token-user") })).json();
+    assert.equal(new URL(url).searchParams.get("scope"), GOOGLE_SCOPES);
+    assert.equal(new URL(url).searchParams.get("access_type"), "offline");
+  });
 });
 
 test("D-2: the sign-in token never replaces the token of a connected Drive account", async () => {

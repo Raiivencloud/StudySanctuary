@@ -240,17 +240,18 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
               {!isConnected ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center space-y-6">
                   <div className="w-20 h-20 bg-surface-container-low rounded-full flex items-center justify-center text-on-surface-variant/30">
-                    <img src="https://www.google.com/favicon.ico" className="w-10 h-10 grayscale opacity-50" alt="Google" />
+                    <img src="/assets/google-g.svg" className="w-10 h-10 grayscale opacity-50" alt="Google" />
                   </div>
                   <div className="space-y-2 max-w-xs">
                     <h4 className="font-bold text-on-surface">Conectar Google Drive</h4>
-                    <p className="text-sm text-on-surface-variant">Conecta tu cuenta para acceder a tus materiales de estudio directamente.</p>
+                    <p className="text-sm text-on-surface-variant">Conecta tu cuenta para guardar y reutilizar tus materiales de estudio.</p>
+                    <p className="text-xs text-on-surface-variant/70">StudySanctuary solo accede a los archivos que subas o abras desde la app; no ve el resto de tu Drive.</p>
                   </div>
                   <button 
                     onClick={handleConnect}
                     className="px-8 py-3 bg-primary text-on-primary rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all flex items-center gap-2"
                   >
-                    <img src="https://www.google.com/favicon.ico" className="w-4 h-4 brightness-0 invert" alt="Google" />
+                    <img src="/assets/google-g.svg" className="w-4 h-4 brightness-0 invert" alt="Google" />
                     {isConnected ? 'Reconectar' : 'Conectar'}
                   </button>
                 </div>
@@ -260,9 +261,22 @@ export const DrivePickerModal: React.FC<DrivePickerModalProps> = ({ isOpen, onCl
                   <p className="text-sm font-medium text-on-surface-variant">Cargando archivos de Drive...</p>
                 </div>
               ) : files.length === 0 ? (
-                <div className="text-center py-20 space-y-4">
-                  <p className="text-on-surface-variant">No se encontraron archivos en Drive</p>
-                  <button onClick={fetchFiles} className="text-primary font-bold text-sm hover:underline">Actualizar</button>
+                <div className="text-center py-16 space-y-4">
+                  <p className="text-on-surface-variant">Todavía no hay archivos de StudySanctuary en tu Drive.</p>
+                  <p className="text-xs text-on-surface-variant/70 max-w-sm mx-auto">Por privacidad, la app solo ve los archivos que subís desde acá. Subí uno para empezar.</p>
+                  {/* Upload must also be possible with an empty list (minimal drive.file scope) */}
+                  <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+                  <div className="flex items-center justify-center gap-4">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-bold shadow-sm hover:bg-primary/90 transition-all disabled:opacity-50"
+                    >
+                      {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                      Subir a Drive
+                    </button>
+                    <button onClick={fetchFiles} className="text-primary font-bold text-sm hover:underline">Actualizar</button>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3">

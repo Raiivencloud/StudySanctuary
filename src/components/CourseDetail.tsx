@@ -19,7 +19,9 @@ interface CourseDetailProps {
 
 export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
   const { t, language } = useLanguage();
-  const { courses, updateCourseProgress, addFileToCourse, removeFileFromCourse, updateCourse, addActivity, getCourseContent } = useCourses();
+  const { courses, updateCourseProgress, addFileToCourse, removeFileFromCourse, updateCourse, addActivity, getCourseContent, exams: calendarExams } = useCourses();
+  const today = new Date().toISOString().split('T')[0];
+  const nextExam = [...calendarExams].filter(e => e.date && e.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
   
   const course = courses.find(c => c.id === courseId);
   const userId = auth.currentUser?.uid;
@@ -661,7 +663,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
       <UsageLimitModal isOpen={isLimitModalOpen} onClose={() => setIsLimitModalOpen(false)} />
       {/* Breadcrumbs */}
       <nav className="w-full flex flex-wrap items-center justify-center md:justify-start gap-2 text-on-surface-variant text-sm font-medium">
-        <button className="hover:text-primary transition-colors">Inicio</button>
+        <button onClick={() => window.location.assign('/?view=dashboard')} className="hover:text-primary transition-colors">Inicio</button>
         <ChevronRight size={14} />
         <span className="text-on-surface text-center">{course?.title || 'Cursos'}</span>
       </nav>
@@ -675,10 +677,12 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
             </h2>
             <p className="text-on-surface-variant max-w-md">{course?.subtitle}</p>
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 md:gap-6 text-on-surface-variant">
-              <div className="flex items-center space-x-2">
-                <Timer className="text-secondary" size={18} />
-                <span className="text-xs md:text-sm font-medium">Estudio estimado: {course?.estimatedHours || 4.5} horas</span>
-              </div>
+              {course?.estimatedHours ? (
+                <div className="flex items-center space-x-2">
+                  <Timer className="text-secondary" size={18} />
+                  <span className="text-xs md:text-sm font-medium">Estudio estimado: {course.estimatedHours} horas</span>
+                </div>
+              ) : null}
               <div className="flex items-center space-x-2">
                 <CheckCircle className="text-primary" size={18} />
                 <span className="text-xs md:text-sm font-medium">Progreso: {progress}% ({course?.status || 'en progreso'})</span>
@@ -687,15 +691,18 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <div className="flex items-center gap-4 bg-card p-4 rounded-2xl shadow-sm border border-outline-variant/10">
-              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                <Trophy size={20} className="md:w-6 md:h-6" />
+            {/* Next real exam from the calendar (it used to be a fixed placeholder) */}
+            {nextExam && (
+              <div className="flex items-center gap-4 bg-card p-4 rounded-2xl shadow-sm border border-outline-variant/10">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                  <Trophy size={20} className="md:w-6 md:h-6" />
+                </div>
+                <div className="text-left">
+                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest leading-none mb-1">Próximo examen</p>
+                  <p className="text-xs md:text-sm font-bold text-on-surface">{nextExam.title} · {nextExam.date}</p>
+                </div>
               </div>
-              <div className="text-left">
-                <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest leading-none mb-1">Próximo Hito</p>
-                <p className="text-xs md:text-sm font-bold text-on-surface">Examen de Unidad</p>
-              </div>
-            </div>
+            )}
 
             <AnimatePresence mode="wait">
               {!isCompleted ? (
@@ -905,17 +912,19 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
                   </div>
                 ) : (
                   <div key={`summary-loading-${course.id}`} className="flex flex-col items-center justify-center py-12 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-                    <p className="text-on-surface-variant italic">Generando resumen inteligente...</p>
+                    {/* Spinner only while generating; otherwise an empty state (it used to spin forever) */}
+                    {isGeneratingSummary ? (
+                      <>
+                        <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+                        <p className="text-on-surface-variant italic">Generando resumen inteligente...</p>
+                      </>
+                    ) : (
+                      <p className="text-on-surface-variant italic">Todavía no hay resumen: usá «Generar Resumen».</p>
+                    )}
                   </div>
                 )}
               </div>
 
-              <div className="mt-6 flex flex-wrap gap-2">
-                <span className="px-3 py-1 bg-surface-container-low text-on-surface-variant text-xs rounded-full">Formalismo</span>
-                <span className="px-3 py-1 bg-surface-container-low text-on-surface-variant text-xs rounded-full">Crítica Contextual</span>
-                <span className="px-3 py-1 bg-surface-container-low text-on-surface-variant text-xs rounded-full">Identificación de Motivos</span>
-              </div>
             </div>
 
             {/* Theory Cards */}
@@ -1014,7 +1023,6 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
             <div id="exams" className="responsive-card md:col-span-2 bg-card rounded-xl p-6 md:p-8 shadow-sm scroll-mt-24 w-full">
               <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
                 <h3 className="font-headline font-bold text-xl">Exámenes Disponibles</h3>
-                <span className="text-[10px] font-semibold text-tertiary bg-tertiary-container/10 px-3 py-1 rounded-full uppercase tracking-wider">Prioridad Alta</span>
               </div>
               <div className="space-y-4">
                 {courseContent?.exams && courseContent.exams.length > 0 ? (
@@ -1046,8 +1054,15 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
                   ))
                 ) : (
                   <div className="flex flex-col items-center justify-center py-8 text-center bg-surface-container-low rounded-xl border border-dashed border-outline-variant/30">
-                    <Loader2 className="w-6 h-6 animate-spin text-primary mb-2" />
-                    <p className="text-xs text-on-surface-variant italic">Generando exámenes personalizados...</p>
+                    {/* Spinner only while generating; otherwise an empty state (it used to spin forever) */}
+                    {isGeneratingExam ? (
+                      <>
+                        <Loader2 className="w-6 h-6 animate-spin text-primary mb-2" />
+                        <p className="text-xs text-on-surface-variant italic">Generando exámenes personalizados...</p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-on-surface-variant italic">Todavía no hay exámenes: usá «Generar Ahora».</p>
+                    )}
                   </div>
                 )}
 
@@ -1058,7 +1073,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
                     </div>
                     <div>
                       <h4 className="font-bold text-on-surface">Regenerar Examen</h4>
-                      <p className="text-xs text-on-surface-variant">Preguntas personalizadas basadas en tu progreso</p>
+                      <p className="text-xs text-on-surface-variant">Nuevas preguntas a partir del resumen del curso</p>
                     </div>
                   </div>
                   <button 
@@ -1482,8 +1497,15 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
                     </div>
                   ) : (
                     <div key={`theory-loading-${course.id}`} className="flex flex-col items-center justify-center py-12 text-center">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-                      <p className="text-on-surface-variant italic">Generando teoría detallada...</p>
+                      {/* Spinner only while generating; otherwise an empty state (it used to spin forever) */}
+                      {isGeneratingTheory ? (
+                        <>
+                          <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+                          <p className="text-on-surface-variant italic">Generando teoría detallada...</p>
+                        </>
+                      ) : (
+                        <p className="text-on-surface-variant italic">Todavía no hay teoría para este curso.</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1538,8 +1560,15 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
                     </div>
                   ) : (
                     <div key={`examples-loading-${course.id}`} className="flex flex-col items-center justify-center py-12 text-center">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-                      <p className="text-on-surface-variant italic">Generando ejemplos prácticos...</p>
+                      {/* Spinner only while generating; otherwise an empty state (it used to spin forever) */}
+                      {isGeneratingExamples ? (
+                        <>
+                          <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+                          <p className="text-on-surface-variant italic">Generando ejemplos prácticos...</p>
+                        </>
+                      ) : (
+                        <p className="text-on-surface-variant italic">Todavía no hay ejemplos para este curso.</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1594,8 +1623,15 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
                     </div>
                   ) : (
                     <div key={`exercises-loading-${course.id}`} className="flex flex-col items-center justify-center py-12 text-center">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-                      <p className="text-on-surface-variant italic">Generando ejercicios...</p>
+                      {/* Spinner only while generating; otherwise an empty state (it used to spin forever) */}
+                      {isGeneratingExercises ? (
+                        <>
+                          <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+                          <p className="text-on-surface-variant italic">Generando ejercicios...</p>
+                        </>
+                      ) : (
+                        <p className="text-on-surface-variant italic">Todavía no hay ejercicios: generalos desde la tarjeta Ejercicios.</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1650,8 +1686,15 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({ courseId }) => {
                     </div>
                   ) : (
                     <div key={`diagram-loading-${course.id}`} className="flex flex-col items-center justify-center py-12 text-center">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-                      <p className="text-on-surface-variant italic">Generando esquemas...</p>
+                      {/* Spinner only while generating; otherwise an empty state (it used to spin forever) */}
+                      {isGeneratingDiagram ? (
+                        <>
+                          <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+                          <p className="text-on-surface-variant italic">Generando esquemas...</p>
+                        </>
+                      ) : (
+                        <p className="text-on-surface-variant italic">Todavía no hay esquema: generalo desde la tarjeta Esquema.</p>
+                      )}
                     </div>
                   )}
                 </div>

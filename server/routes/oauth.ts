@@ -28,20 +28,17 @@ export interface OAuthRouterOptions {
   /** Session cookie options, needed to clear the cookie on logout. */
   sessionCookie: { name: string; secure: boolean; sameSite: "none" | "lax" | "strict" };
   exchangeCode?: ExchangeCode;
-  /** "all": read the whole Drive (restricted scope, needs Google's security assessment); "app": only files used through the app. */
-  googleDriveAccess?: GoogleDriveAccess;
 }
 
-export type GoogleDriveAccess = "all" | "app";
-
-/** Google scopes: drive.file is needed to upload; drive.readonly (restricted) lists the whole Drive. */
-export function googleScopes(access: GoogleDriveAccess = "all"): string {
-  return [
-    "https://www.googleapis.com/auth/calendar.readonly",
-    ...(access === "all" ? ["https://www.googleapis.com/auth/drive.readonly"] : []),
-    "https://www.googleapis.com/auth/drive.file",
-  ].join(" ");
-}
+/**
+ * Google scopes, minimal by design: Calendar read-only and drive.file (only the files the user
+ * uploads or opens through StudySanctuary). The restricted drive.readonly scope is not used: it
+ * would require Google's annual CASA security assessment (docs/SALE_AND_TRANSFER.md).
+ */
+export const GOOGLE_SCOPES = [
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/drive.file",
+].join(" ");
 
 /** Tokens from the authorization-code flow: absolute expiry and their origin (never replaced by a sign-in token). */
 export function normalizeOAuthTokens(raw: any, now = Date.now()): StoredTokens {
@@ -56,7 +53,7 @@ export function normalizeOAuthTokens(raw: any, now = Date.now()): StoredTokens {
 const PROVIDERS: Record<OAuthProvider, { authorizeUrl: string; scope: string; extraParams: Record<string, string> }> = {
   google: {
     authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-    scope: googleScopes("all"),
+    scope: GOOGLE_SCOPES,
     extraParams: { access_type: "offline", prompt: "consent" },
   },
   outlook: {
@@ -110,7 +107,7 @@ export function createOAuthRouter(options: OAuthRouterOptions): Router {
       client_id: clientFor(provider).clientId || "",
       redirect_uri: redirectUriFor(provider),
       response_type: "code",
-      scope: provider === "google" ? googleScopes(options.googleDriveAccess) : config.scope,
+      scope: config.scope,
       state,
       ...config.extraParams,
     });

@@ -643,7 +643,7 @@ export const ArenaView: React.FC<ArenaViewProps> = ({ onExit }) => {
                 Arena Sanctuary
               </h1>
               <div className="flex items-center gap-3 text-[8px] md:text-[10px] font-black uppercase text-white/40">
-                <span><span className="hidden sm:inline">Usuario: </span><span className="text-white">{userProfile?.displayName?.split(' ')[0] || 'Agustín'}</span></span>
+                <span><span className="hidden sm:inline">Usuario: </span><span className="text-white">{userProfile?.displayName?.split(' ')[0] || 'Estudiante'}</span></span>
                 <span className="w-1 h-1 bg-white/20 rounded-full" />
                 <span><span className="hidden sm:inline">Nivel: </span><span className="text-cyan-400">{selectedLevel}</span></span>
               </div>

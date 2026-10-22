@@ -957,7 +957,7 @@ export const AIStudyView: React.FC<{
             className="flex items-center gap-4"
           >
             <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">
-              '¿Es útil?'
+              ¿Es útil?
             </p>
             <div className="flex gap-2">
               <button
@@ -1127,7 +1127,7 @@ export const AIStudyView: React.FC<{
                     <Upload className={`w-8 h-8 transition-colors ${isDragging ? 'text-primary' : 'text-on-surface-variant group-hover:text-primary'}`} />
                     <div className="text-center">
                       <span className="block text-xs font-bold uppercase tracking-wider text-on-surface">Subir Documento / Programa de Estudio</span>
-                      <span className="text-[10px] text-on-surface-variant uppercase tracking-tighter opacity-60">PDF, TXT, DOCX (Max 10MB)</span>
+                      <span className="text-[10px] text-on-surface-variant uppercase tracking-tighter opacity-60">PDF, DOCX, XLSX o imágenes</span>
                     </div>
                   </button>
                   
@@ -1135,7 +1135,7 @@ export const AIStudyView: React.FC<{
                     onClick={onDriveClick}
                     className="w-full max-w-[350px] py-4 bg-surface-container-low border border-outline-variant/30 rounded-2xl flex items-center justify-center gap-3 hover:bg-surface-container-high transition-all group"
                   >
-                    <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+                    <img src="/assets/google-g.svg" className="w-5 h-5" alt="Google" />
                     <span className="text-sm font-bold text-on-surface">Google Drive</span>
                   </button>
                 </div>

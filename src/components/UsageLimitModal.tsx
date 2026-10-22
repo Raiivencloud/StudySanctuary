@@ -27,15 +27,15 @@ export const UsageLimitModal: React.FC<UsageLimitModalProps> = ({ isOpen, onClos
               <X size={24} />
             </button>
             <Sparkles className="w-16 h-16 mx-auto text-emerald-500 mb-6" />
-            <h2 className="text-2xl font-bold text-on-surface mb-4">¡Tu potencial no tiene límites, pero tus créditos sí! ✨</h2>
-            <p className="text-on-surface-variant mb-8">Has alcanzado el límite de consultas gratuitas. Para seguir generando podcasts personalizados, ejercicios inteligentes y resúmenes, elige uno de nuestros planes premium.</p>
-            <button className="w-full py-4 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-all mb-4">
+            <h2 className="text-2xl font-bold text-on-surface mb-4">Te quedaste sin créditos ✨</h2>
+            <p className="text-on-surface-variant mb-8">Para seguir generando resúmenes, ejercicios y podcasts, podés comprar un plan (pago único) o esperar la recarga gratuita diaria cuando tu saldo llega a cero.</p>
+            <button onClick={() => window.location.assign('/?view=subscription')} className="w-full py-4 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-all mb-4">
               Ver Planes
             </button>
             <button onClick={onClose} className="text-sm text-on-surface-variant hover:text-emerald-500 underline">
               Volver al Dashboard
             </button>
-            <p className="mt-6 text-[10px] text-on-surface-variant opacity-60">Tus suscripciones ayudan a mantener viva la inteligencia de Study Sanctuary</p>
+            <p className="mt-6 text-[10px] text-on-surface-variant opacity-60">Los planes ayudan a cubrir el costo de la IA de StudySanctuary</p>
           </motion.div>
         </motion.div>
       )}

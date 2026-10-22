@@ -189,7 +189,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isO
             {isOpen && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-white truncate">
-                  {userProfile?.displayName || user?.displayName || 'Raiiven Games'}
+                  {userProfile?.displayName || user?.displayName || 'Estudiante'}
                 </p>
                 <p className="text-[10px] text-white/40 truncate">{user?.email || ''}</p>
               </div>

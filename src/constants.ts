@@ -13,23 +13,21 @@ export const SUBSCRIPTION_PLANS = {
     name: 'Plan Mensual',
     price: 1200,
     credits: 300,
-    description: '300 Créditos: Suficiente para resumir toda tu cursada'
+    description: '300 Créditos de IA por 30 días'
   },
   TRIMESTRAL: {
     id: 'trimestral',
     name: 'Plan Trimestral',
     price: 4200,
-    oldPrice: 7000,
     credits: 1000,
-    description: '1.000 Créditos de IA ($2.800 de ahorro)'
+    description: '1.000 Créditos de IA por 90 días'
   },
   ANUAL: {
     id: 'anual',
     name: 'Plan Anual',
     price: 12000,
-    oldPrice: 18000,
     credits: 5000,
-    description: '5.000 Créditos de IA ($6.000 de ahorro)'
+    description: '5.000 Créditos de IA por 365 días'
   }
 };
 

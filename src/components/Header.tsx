@@ -10,6 +10,7 @@ import { UserBadge } from './UserBadge';
 import { isFounder } from '../config/admin';
 import { useCourses } from '../contexts/CourseContext';
 import { buildNotifications } from '../lib/studyStats';
+import { summarizePlan } from '../lib/planSummary';
 
 const NOTIFICATION_STYLE = {
   exam: { icon: Clock, color: 'text-amber-400' },
@@ -254,7 +255,6 @@ export const Header: React.FC<HeaderProps> = ({ onViewChange, onToggleSidebar, o
                     )}
                   </div>
                   <div className="p-4 bg-on-surface/5 text-center border-t border-outline-variant">
-                    <button className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant hover:text-primary transition-colors">VER HISTORIAL COMPLETO</button>
                   </div>
                 </motion.div>
               )}
@@ -320,7 +320,7 @@ export const Header: React.FC<HeaderProps> = ({ onViewChange, onToggleSidebar, o
                     />
                     <div className="min-w-0">
                       <p className="text-xs font-black text-on-surface truncate">{userProfile?.displayName || user?.displayName || 'Estudiante'}</p>
-                      <p className="text-[9px] text-primary font-black uppercase tracking-widest">PLAN PREMIUM</p>
+                      <p className="text-[9px] text-primary font-black uppercase tracking-widest">{summarizePlan(userProfile?.subscription).label}</p>
                     </div>
                   </div>
                 </div>

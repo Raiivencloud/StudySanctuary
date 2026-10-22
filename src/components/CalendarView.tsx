@@ -89,22 +89,13 @@ export const CalendarView: React.FC = () => {
     addExam(examToAdd);
     setShowModal(false);
     
-    // Simulate setting a reminder notification for the demo
-    if (newExam.reminder !== 'none') {
-      const notification: AppNotification = {
-        id: Date.now().toString(),
-        title: 'Recordatorio',
-        message: `Título del Examen: ${newExam.title} - ${newExam.date} ${newExam.time}`,
-        timestamp: Date.now(),
-        read: false
-      };
-      setNotifications(prev => [notification, ...prev]);
-      
-      toast.success('Recordatorio', {
-        description: notification.message,
-        icon: <Bell size={16} />,
-      });
-    }
+    // In-app reminder only (header notifications); there are no emails or push notifications
+    toast.success('Examen agregado', {
+      description: newExam.reminder !== 'none'
+        ? 'Lo vas a ver en las notificaciones de la app cuando se acerque la fecha.'
+        : `${newExam.title} · ${newExam.date} ${newExam.time}`,
+      icon: <Bell size={16} />,
+    });
 
     setNewExam({
       title: '',
@@ -294,7 +285,7 @@ export const CalendarView: React.FC = () => {
                 onClick={() => handleSyncCalendar('google')}
                 className="w-full px-4 py-3 text-left text-sm font-bold text-on-surface hover:bg-surface-container-low flex items-center gap-2"
               >
-                <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="Google" />
+                <img src="/assets/google-g.svg" className="w-4 h-4" alt="Google" />
                 Google Calendar
               </button>
               <button 
@@ -474,7 +465,6 @@ export const CalendarView: React.FC = () => {
           <div className="responsive-card bg-card p-4 md:p-6 rounded-xl shadow-sm space-y-6">
             <div className="flex items-center justify-between">
               <h3 className="font-headline font-bold text-on-surface">Próximos Exámenes</h3>
-              <button className="text-primary text-[10px] md:text-xs font-bold uppercase tracking-wider hover:underline">Ver Todo</button>
             </div>
             <div className="space-y-4">
               {exams.map(exam => {
@@ -652,7 +642,7 @@ export const CalendarView: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-1 block">Recordatorio</label>
+                <label className="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-1 block">Recordatorio en la app</label>
                 <select 
                   value={newExam.reminder}
                   onChange={e => setNewExam({...newExam, reminder: e.target.value as any})}

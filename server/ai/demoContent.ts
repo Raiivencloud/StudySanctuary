@@ -12,6 +12,8 @@ const PATTERNS: [RegExp, (topic: string) => string][] = [
   [/ejercicios prácticos sobre:\s*([\s\S]+)/i, exercises],
   [/diagrama Mermaid sobre:\s*([\s\S]+)/i, diagram],
   [/guión de podcast educativo extenso sobre:\s*([\s\S]+?)\.\s*\n/i, podcast],
+  [/guía de estudio del capítulo (\d+) del libro "([^"]+)"/i, (topic) => bookGuide(topic)],
+  [/guía de estudio completa para el libro "([^"]+)"/i, (topic) => bookGuide(topic)],
 ];
 
 /** Shortens the topic to something readable (prompts may embed whole documents). */
@@ -23,7 +25,8 @@ function cleanTopic(raw: string): string {
 export function demoText(prompt: string): string {
   for (const [pattern, render] of PATTERNS) {
     const match = pattern.exec(prompt);
-    if (match) return `${render(cleanTopic(match[1]))}\n\n${DEMO_NOTE}`;
+    // Book chapter guides capture (chapter, title): use the title as the topic
+    if (match) return `${render(cleanTopic(match[2] ? `${match[2]}, capítulo ${match[1]}` : match[1]))}\n\n${DEMO_NOTE}`;
   }
   return `${answer(prompt)}\n\n${DEMO_NOTE}`;
 }
@@ -107,6 +110,26 @@ Escuchá bien esto: lo más importante de ${topic} es entender la idea central a
 Primero, la definición. Después, un ejemplo de todos los días. Y al final, lo que suele entrar en examen, así que prestá atención.
 
 Para cerrar: repasá los puntos clave en voz alta y vas a ver que ${topic} se vuelve mucho más simple.`;
+}
+
+function bookGuide(topic: string): string {
+  return `## Guía de lectura: ${topic}
+
+### Resumen
+En esta parte, la obra presenta a sus personajes principales y el conflicto que mueve la historia.
+
+### Personajes e ideas
+- **Protagonista:** sus decisiones y lo que revelan.
+- **Conflicto central:** qué está en juego.
+
+### Temas para analizar
+1. El contexto histórico de la obra.
+2. Los símbolos que se repiten.
+
+### Preguntas para repasar
+1. ¿Qué cambia en el protagonista?
+2. ¿Qué papel cumple el escenario?
+3. ¿Qué tema se anticipa para los capítulos siguientes?`;
 }
 
 function answer(prompt: string): string {

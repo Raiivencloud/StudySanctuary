@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Zap } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,7 +8,6 @@ import { SUBSCRIPTION_PLANS } from '../constants';
 
 export const UserCreditStats: React.FC = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [data, setData] = useState({ credits: 0, subscriptionType: 'Gratis', hasUsedFreeTrial: false });
 
   useEffect(() => {
@@ -71,7 +69,7 @@ export const UserCreditStats: React.FC = () => {
       <p className="text-xs text-on-surface-variant font-medium">{motivationalPhrase}</p>
 
       <button 
-        onClick={() => navigate('/subscription')}
+        onClick={() => window.location.assign('/?view=subscription')}
         className="w-full py-3 bg-primary text-on-primary rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-primary/90 transition-all mt-2"
       >
         Cargar más créditos

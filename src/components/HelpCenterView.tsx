@@ -1,37 +1,20 @@
 import React, { useState } from 'react';
-import { HelpCircle, ChevronRight, MessageCircle, Mail, Phone, Send, X, User } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '../lib/utils';
-import { COMMUNITY_URL } from '../config/brand';
+import { HelpCircle, ChevronRight, Mail, ShieldCheck } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { COMMUNITY_URL, SUPPORT_EMAIL } from '../config/brand';
+import { LegalModal } from './LegalModal';
+
+// Answers describe what the app really does (the former live chat was simulated with a timer)
+const FAQS = [
+  { q: '¿Cómo creo un curso?', a: 'Desde el Dashboard, con el botón "Crear Curso". Podés adjuntar archivos (PDF, Word, Excel o imágenes) para que la IA trabaje sobre tus apuntes.' },
+  { q: '¿Qué es un crédito?', a: 'Cada acción de IA (un resumen, un podcast, un examen de práctica, una respuesta del tutor…) usa 1 crédito. Si la IA falla, el crédito se devuelve. Las herramientas dentro de cada curso, el calendario, las tareas y los grupos no usan créditos.' },
+  { q: '¿Cómo funcionan los planes?', a: 'Son pagos únicos con Mercado Pago, por 30, 90 o 365 días. No se renuevan solos ni generan débitos automáticos. Las cuentas gratuitas reciben 5 créditos por día cuando su saldo llega a cero.' },
+  { q: '¿La IA puede equivocarse?', a: 'Sí. El contenido generado con IA puede tener errores: revisalo con tus materiales de clase antes de rendir.' },
+  { q: '¿Cómo pido la eliminación de mi cuenta o de mis datos?', a: `Escribinos a ${SUPPORT_EMAIL} desde el email de tu cuenta. Por ahora la eliminación se gestiona por email.` },
+];
 
 export const HelpCenterView: React.FC = () => {
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [chatMessage, setChatMessage] = useState('');
-  const [messages, setMessages] = useState<{ text: string, sender: 'user' | 'support' }[]>([
-    { text: '¡Hola! ¿En qué podemos ayudarte hoy?', sender: 'support' }
-  ]);
-
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatMessage.trim()) return;
-
-    setMessages(prev => [...prev, { text: chatMessage, sender: 'user' }]);
-    setChatMessage('');
-
-    // Simulate support response
-    setTimeout(() => {
-      setMessages(prev => [...prev, { 
-        text: 'Gracias por tu mensaje. Un agente se conectará pronto para ayudarte.', 
-        sender: 'support' 
-      }]);
-    }, 1000);
-  };
-
-  const faqs = [
-    { q: '¿Cómo puedo crear un curso?', a: 'Puedes crear un curso desde el Dashboard haciendo clic en el botón "Crear Curso".' },
-    { q: '¿Cómo puedo subir mis archivos?', a: 'Puedes subir tus archivos desde la sección de Archivos o directamente al crear un curso.' },
-    { q: '¿Cómo puedo contactar al soporte?', a: 'Puedes contactarnos a través del chat en vivo, email o WhatsApp.' },
-  ];
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
@@ -46,7 +29,7 @@ export const HelpCenterView: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        {faqs.map((faq, index) => (
+        {FAQS.map((faq, index) => (
           <motion.div
             key={index}
             initial={{ opacity: 0, y: 10 }}
@@ -66,23 +49,16 @@ export const HelpCenterView: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
-        <button 
-          onClick={() => setIsChatOpen(true)}
-          className="p-6 bg-primary/5 rounded-2xl border border-primary/10 text-center space-y-3 hover:bg-primary/10 transition-all group"
+        <a
+          href={`mailto:${SUPPORT_EMAIL}`}
+          className="p-6 bg-secondary/5 rounded-2xl border border-secondary/10 text-center space-y-3 hover:bg-secondary/10 transition-all group"
         >
-          <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary mx-auto group-hover:scale-110 transition-transform">
-            <MessageCircle size={20} />
-          </div>
-          <h4 className="font-bold text-on-surface">Chat en Vivo</h4>
-          <p className="text-xs text-on-surface-variant">Disponible 24/7 para usuarios Premium</p>
-        </button>
-        <div className="p-6 bg-secondary/5 rounded-2xl border border-secondary/10 text-center space-y-3">
-          <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center text-secondary mx-auto">
+          <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center text-secondary mx-auto group-hover:scale-110 transition-transform">
             <Mail size={20} />
           </div>
           <h4 className="font-bold text-on-surface">Email</h4>
-          <p className="text-xs text-on-surface-variant">soportestudysanctuary@outlook.com</p>
-        </div>
+          <p className="text-xs text-on-surface-variant break-all">{SUPPORT_EMAIL}</p>
+        </a>
         <a 
           href={COMMUNITY_URL}
           target="_blank"
@@ -95,79 +71,21 @@ export const HelpCenterView: React.FC = () => {
             </svg>
           </div>
           <h4 className="font-bold text-on-surface">Discord</h4>
-          <p className="text-xs text-on-surface-variant">¿Tenés dudas? Unite a nuestro Discord oficial para ayuda en tiempo real</p>
+          <p className="text-xs text-on-surface-variant">Comunidad de estudiantes para dudas y novedades</p>
         </a>
+        <button
+          onClick={() => setShowPrivacy(true)}
+          className="p-6 bg-primary/5 rounded-2xl border border-primary/10 text-center space-y-3 hover:bg-primary/10 transition-all group"
+        >
+          <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary mx-auto group-hover:scale-110 transition-transform">
+            <ShieldCheck size={20} />
+          </div>
+          <h4 className="font-bold text-on-surface">Privacidad y términos</h4>
+          <p className="text-xs text-on-surface-variant">Qué datos usamos y cómo</p>
+        </button>
       </div>
 
-      {/* Live Chat Modal */}
-      <AnimatePresence>
-        {isChatOpen && (
-          <div className="fixed inset-0 z-[110] flex items-end justify-end p-4 md:p-8 pointer-events-none">
-            <motion.div
-              initial={{ opacity: 0, y: 100, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 100, scale: 0.9 }}
-              className="bg-card w-[95%] max-w-md h-[600px] rounded-3xl shadow-2xl border border-outline-variant/10 flex flex-col pointer-events-auto overflow-hidden"
-            >
-              {/* Chat Header */}
-              <div className="p-6 bg-primary text-on-primary flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                    <MessageCircle size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold">Soporte en Vivo</h3>
-                    <p className="text-[10px] opacity-80 uppercase tracking-widest">En línea ahora</p>
-                  </div>
-                </div>
-                <button onClick={() => setIsChatOpen(false)} className="hover:bg-white/10 p-2 rounded-lg transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Chat Messages */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-surface-container-lowest">
-                {messages.map((msg, i) => (
-                  <div key={i} className={cn(
-                    "flex gap-3",
-                    msg.sender === 'user' ? "flex-row-reverse" : "flex-row"
-                  )}>
-                    <div className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                      msg.sender === 'user' ? "bg-primary text-on-primary" : "bg-secondary text-on-secondary"
-                    )}>
-                      {msg.sender === 'user' ? <User size={14} /> : <MessageCircle size={14} />}
-                    </div>
-                    <div className={cn(
-                      "p-3 rounded-2xl text-sm max-w-[80%]",
-                      msg.sender === 'user' ? "bg-primary/10 text-on-surface rounded-tr-none" : "bg-secondary/10 text-on-surface rounded-tl-none"
-                    )}>
-                      {msg.text}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Chat Input */}
-              <form onSubmit={handleSendMessage} className="p-4 bg-surface border-t border-outline-variant/10 flex gap-2">
-                <input 
-                  type="text"
-                  value={chatMessage}
-                  onChange={(e) => setChatMessage(e.target.value)}
-                  placeholder="Escribe tu mensaje..."
-                  className="flex-1 bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-2 text-sm outline-none focus:border-primary transition-all"
-                />
-                <button 
-                  type="submit"
-                  className="p-2 bg-primary text-on-primary rounded-xl hover:bg-primary/90 transition-all"
-                >
-                  <Send size={20} />
-                </button>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {showPrivacy && <LegalModal initial="privacy" onClose={() => setShowPrivacy(false)} />}
     </div>
   );
 };

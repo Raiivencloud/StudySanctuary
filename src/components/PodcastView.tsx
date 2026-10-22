@@ -27,6 +27,18 @@ export const PodcastView: React.FC<PodcastViewProps> = ({ driveFile }) => {
   const [currentTrack, setCurrentTrack] = useState<any>(null);
   const [isMuted, setIsMuted] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const playbackStartRef = useRef(0);
+  const [duration, setDuration] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!isPlaying) return;
+    const timer = setInterval(() => {
+      const context = audioContextRef.current;
+      if (context) setElapsed(Math.min(duration, context.currentTime - playbackStartRef.current));
+    }, 250);
+    return () => clearInterval(timer);
+  }, [isPlaying, duration]);
+  const formatSeconds = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   const tracks = [
@@ -189,6 +201,10 @@ export const PodcastView: React.FC<PodcastViewProps> = ({ driveFile }) => {
       source.onended = () => setIsPlaying(false);
       source.start();
       sourceRef.current = source;
+      // Real progress: the audio context clock stops while paused (suspend)
+      playbackStartRef.current = audioContextRef.current.currentTime;
+      setDuration(audioBuffer.duration);
+      setElapsed(0);
       setIsPlaying(true);
     } catch (error) {
       console.error("Error playing audio:", error);
@@ -271,9 +287,6 @@ export const PodcastView: React.FC<PodcastViewProps> = ({ driveFile }) => {
 
               {/* Controls */}
               <div className="flex items-center gap-8">
-                <button className="p-3 text-on-surface-variant hover:text-primary transition-all">
-                  <SkipBack size={24} />
-                </button>
                 <button
                   onClick={togglePlay}
                   disabled={!currentTrack || isGenerating}
@@ -287,22 +300,18 @@ export const PodcastView: React.FC<PodcastViewProps> = ({ driveFile }) => {
                     <Play size={32} className="ml-1" />
                   )}
                 </button>
-                <button className="p-3 text-on-surface-variant hover:text-primary transition-all">
-                  <SkipForward size={24} />
-                </button>
               </div>
 
               <div className="w-full space-y-2">
                 <div className="h-1.5 bg-surface-container-high rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-primary"
-                    animate={{ width: isPlaying ? "100%" : "0%" }}
-                    transition={{ duration: 300, ease: "linear" }}
+                  <div
+                    className="h-full bg-primary transition-[width] duration-200 ease-linear"
+                    style={{ width: duration > 0 ? `${(elapsed / duration) * 100}%` : '0%' }}
                   />
                 </div>
                 <div className="flex justify-between text-[10px] font-bold text-on-surface-variant opacity-40 uppercase tracking-widest">
-                  <span>0:00</span>
-                  <span>5:00</span>
+                  <span>{formatSeconds(elapsed)}</span>
+                  <span>{duration > 0 ? formatSeconds(duration) : '--:--'}</span>
                 </div>
               </div>
             </div>

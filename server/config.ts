@@ -59,10 +59,6 @@ export interface ServerConfig {
     maxAttempts: number;
     timeoutMs: number;
   };
-  integrations: {
-    /** Google Drive read access: "all" (drive.readonly, restricted scope) or "app" (drive.file only). */
-    googleDriveAccess: "all" | "app";
-  };
   payments: {
     /** "mercadopago" (MERCADOPAGO_ACCESS_TOKEN), "fake" (simulated, development only) or "disabled". */
     mode: "mercadopago" | "fake" | "disabled";
@@ -220,11 +216,10 @@ export function loadServerConfig(env: Env = process.env): ServerConfig {
       "los pagos se acreditarían en una base distinta de la que lee la app (ver docs/FIRESTORE_DATABASES.md)."
     );
   }
-  const driveAccessRaw = read(env, "GOOGLE_DRIVE_ACCESS").toLowerCase() || "all";
-  if (driveAccessRaw !== "all" && driveAccessRaw !== "app") {
-    problems.push("GOOGLE_DRIVE_ACCESS debe ser all (todo el Drive, permiso restringido) o app (solo archivos usados desde la app).");
+  // Google Drive always uses the minimal drive.file scope (Phase 7); the old full-read option is gone
+  if (read(env, "GOOGLE_DRIVE_ACCESS").toLowerCase() === "all") {
+    problems.push("GOOGLE_DRIVE_ACCESS=all ya no se admite: Drive usa solo drive.file (archivos usados desde la app). Quitá la variable.");
   }
-  const googleDriveAccess: "all" | "app" = driveAccessRaw === "app" ? "app" : "all";
 
   const allowTestPayments = read(env, "MERCADOPAGO_ALLOW_TEST_PAYMENTS") === "true" || !isProduction;
 
@@ -264,7 +259,6 @@ export function loadServerConfig(env: Env = process.env): ServerConfig {
       maxAttempts: aiMaxAttempts,
       timeoutMs: aiTimeoutMs,
     },
-    integrations: { googleDriveAccess },
     payments: {
       mode: paymentsMode,
       accessToken: mpAccessToken,

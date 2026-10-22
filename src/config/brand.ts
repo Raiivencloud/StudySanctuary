@@ -8,6 +8,9 @@ const env = ((import.meta as any).env || {}) as Record<string, string | undefine
 /** Community link shown in several screens (Discord). */
 export const COMMUNITY_URL = env.VITE_COMMUNITY_URL || 'https://discord.gg/Y5yFKEYD9r';
 
+/** Support email shown in the Help Center. */
+export const SUPPORT_EMAIL = env.VITE_SUPPORT_EMAIL || 'soportestudysanctuary@outlook.com';
+
 /**
  * Google Tag Manager container. Disabled in the local demo and with VITE_GTM_ID=off.
  * Only the GTM-XXXX format is accepted (the id is inserted into a script).
