@@ -78,8 +78,13 @@ test("P6-3/P6-5: plan badges use the stored plan type; no third-party personal d
   const header = read("src/components/Header.tsx");
   assert.match(header, /subscription\.type === 'trimestral' && <UserBadge type="silver" \/>/);
   assert.match(header, /subscription\.type === 'anual' && <UserBadge type="gold" \/>/);
+  // No hard-coded people: no email literals and no "First Last" fallback names
   for (const file of ["src/components/Header.tsx", "src/components/Sidebar.tsx"]) {
-    assert.doesNotMatch(read(file), /vignalo|Andrés Vignalo|agusgestro17/i, file);
+    const source = read(file);
+    assert.doesNotMatch(source, /['"`][^'"`\s]+@[^'"`\s]+\.[a-z]{2,}['"`]/i, file);
+    const names = [...source.matchAll(/\|\|\s*['"]([A-ZÁÉÍÓÚ][a-záéíóúñ]+) [A-ZÁÉÍÓÚ][a-záéíóúñ]+['"]/g)]
+      .filter((m) => !["Perfil", "Usuario", "Estudiante"].includes(m[1]));
+    assert.deepEqual(names.map((m) => m[0]), [], file);
   }
 });
 

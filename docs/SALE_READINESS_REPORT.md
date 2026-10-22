@@ -15,7 +15,7 @@ Documentos relacionados:
 | Modalidad | ¿Se puede ofrecer hoy? | Condición |
 |---|---|---|
 | **Código fuente transferible** | **Sí** | Con contrato de cesión que declare el origen en AI Studio, el uso de IA y las licencias de terceros. Debe aclarar que los textos legales son borradores y que la versión no está desplegada. |
-| **SaaS en funcionamiento** | **No todavía** | Faltan los bloqueantes de la sección B: revisión legal, borrado de cuenta, edad, despliegue y pruebas con servicios reales |
+| **SaaS en funcionamiento** | **No todavía.** No debe presentarse como SaaS en producción ni como negocio con ingresos demostrados. | Faltan los bloqueantes de la sección B: revisión legal, borrado de cuenta, edad, despliegue y pruebas con servicios reales |
 
 ## A. Listo para vender como código fuente
 

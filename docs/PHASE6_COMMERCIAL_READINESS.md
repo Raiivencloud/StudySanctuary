@@ -59,7 +59,7 @@ Rama local: `phase6-commercial-readiness`, creada sobre `phase5-payments`.
   - **Recomiendo A**: es una funcionalidad visible y ya probada del lado del servidor.
 
 ### P6-5: Datos personales escritos en el código
-- **Hallazgo:** si falta el perfil, el encabezado mostraba el nombre y el email de **otra persona real** ("Andrés Vignalo", `vignaloandres05@...`), y la barra lateral, el email del propietario. La insignia "Fundador" comparaba el email del propietario con mayúsculas, así que no coincidía con el email real (Google lo entrega en minúsculas) y nunca se mostraba.
+- **Hallazgo:** si falta el perfil, el encabezado mostraba el nombre y el email de **otra persona real** (escritos en el código como valor por defecto; se omiten aquí), y la barra lateral, el email del propietario. La insignia "Fundador" comparaba el email del propietario con mayúsculas, así que no coincidía con el email real (Google lo entrega en minúsculas) y nunca se mostraba.
 - **Corrección:**
   - Los textos de respaldo pasan a ser "Estudiante" y vacío.
   - La insignia "Fundador" usa la misma lista que el administrador de respaldo (`src/config/admin.ts`), así que al transferir se cambia **un solo archivo**.

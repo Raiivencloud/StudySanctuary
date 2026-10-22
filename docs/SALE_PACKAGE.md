@@ -2,6 +2,15 @@
 
 Versión **1.1.0-rc.1** (rama `release-candidate-1.1`), 22/10/2026. Junta lo que necesita un comprador para evaluar el producto. Cada sección enlaza al documento técnico con el detalle.
 
+> **Qué se vende:** el **código fuente** de una aplicación terminada y probada, con su documentación.
+>
+> **Qué no se vende:**
+> - **no** es un SaaS en producción: esta versión no está desplegada;
+> - **no** es un negocio con ingresos, usuarios pagos ni métricas de tracción demostradas;
+> - **no** está listo para operar sin resolver antes los pendientes legales, técnicos y operativos de [`BUYER_RISKS.md`](./BUYER_RISKS.md).
+>
+> Todas las cifras de costos son **estimaciones** con precios públicos de referencia.
+
 ## 1. Descripción comercial
 
 **StudySanctuary** es una plataforma web de estudio con inteligencia artificial para estudiantes de nivel inicial, secundario, universitario y de posgrado, en español.
@@ -106,7 +115,7 @@ Cómo se aseguró el producto:
 | Revisión legal | Honorarios: privacidad, términos, cesión, datos personales y menores |
 | Desarrollo pendiente para operar | Borrar y exportar la cuenta; reemplazar la música y los mapas sin licencia comercial ([`BUYER_RISKS.md`](./BUYER_RISKS.md)) |
 
-**Ingreso por plan antes de costos:** un plan Mensual ($ 1.200) entrega 300 créditos. Si se usan todos en acciones de texto, la IA cuesta ≈ US$ 0,90; si se usan en podcasts, puede llegar a US$ 15–30. **Revisar el precio del podcast** antes de operar.
+**Ejemplo teórico de margen por plan (no son ingresos reales):** un plan Mensual ($ 1.200) entrega 300 créditos. Si se usan todos en acciones de texto, la IA cuesta ≈ US$ 0,90; si se usan en podcasts, puede llegar a US$ 15–30. **Revisar el precio del podcast** antes de operar.
 
 ## 7. Limitaciones conocidas
 

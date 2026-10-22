@@ -59,6 +59,7 @@ Lista final al 22/10/2026 (versión 1.1.0-rc.1). Ordenada por gravedad. El vende
 | O3 | **Verificación de Google OAuth** pendiente (Calendar es un permiso sensible) | Media | Iniciarla con tiempo; Drive usa `drive.file` (sin CASA) |
 | O4 | **Soporte**: email y Discord del vendedor | Media | Reemplazarlos (`VITE_COMMUNITY_URL`, `VITE_SUPPORT_EMAIL`) |
 | O5 | **Copia de seguridad** antes del primer despliegue | Media | `gcloud firestore export` |
+| O6 | **El historial de Git conserva datos personales** de versiones anteriores: el email del propietario y el nombre y el email de un tercero que estaban escritos en el código (ya quitados del estado actual) | Media | Entregar el código **sin historial** (una copia del último commit) o reescribir el historial antes del traspaso. Requiere decisión del propietario: `main` ya es público. |
 
 ## E. Lo que **no** es un riesgo (verificado)
 
