@@ -16,6 +16,25 @@ interface CreditsResponse {
   subscriptionStatus: string;
 }
 
+/** Next credits that expire (free trial or a plan); credits held before the bucket model never expire. */
+export interface CreditExpiry {
+  amount: number;
+  expiresAt: string;
+}
+
+const isCreditExpiry = (value: any): value is CreditExpiry =>
+  !!value && typeof value.amount === 'number' && typeof value.expiresAt === 'string';
+
+/** Last expiry reported by the server (read by the notifications in the header). */
+export const getCreditExpiry = (userId: string): CreditExpiry | null => {
+  try {
+    const value = JSON.parse(localStorage.getItem(`user_credits_expiring_${userId}`) || 'null');
+    return isCreditExpiry(value) ? value : null;
+  } catch {
+    return null;
+  }
+};
+
 const cacheBalance = (userId: string, credits: number, subscriptionStatus?: string) => {
   localStorage.setItem(`user_credits_${userId}`, JSON.stringify({ credits, timestamp: Date.now() }));
   if (subscriptionStatus) localStorage.setItem(`user_sub_${userId}`, subscriptionStatus);
@@ -43,6 +62,8 @@ async function fetchBalance(userId: string): Promise<CreditsResponse> {
   const data = await response.json();
   const balance = { credits: Number(data.credits) || 0, subscriptionStatus: data.subscriptionStatus || 'Gratis' };
   cacheBalance(userId, balance.credits, balance.subscriptionStatus);
+  localStorage.setItem(`user_credits_expiring_${userId}`, JSON.stringify(isCreditExpiry(data.expiring) ? data.expiring : null));
+  window.dispatchEvent(new CustomEvent('creditExpiryUpdated'));
   return balance;
 }
 

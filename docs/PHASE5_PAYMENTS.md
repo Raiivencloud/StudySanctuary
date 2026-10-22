@@ -63,7 +63,7 @@ Lo que ya estaba bien: las preferencias las crea solo el servidor con el precio 
 
 **Reglas de Firestore:** `paymentOrders` y `payments` son solo del servidor: el cliente no los lee ni los escribe. El usuario ve sus pagos aplicados en su `creditLedger`.
 
-**Fuera de alcance sin tu aprobación:** precios, créditos por plan, duración, si los créditos se suman o reemplazan al comprar (hoy **reemplazan**) y qué pasa con los créditos al vencer el plan (hoy **se conservan**).
+**Fuera de alcance sin tu aprobación:** precios, créditos por plan, duración, si los créditos se suman o reemplazan al comprar y qué pasa con los créditos al vencer el plan. **Actualización:** decidido e implementado en `release-candidate-1.1`: se suman y vencen con el plan (`CREDITS_BUCKETS_PROPOSAL.md` §8).
 
 ## 3. Resultados
 
@@ -146,7 +146,7 @@ Lo que ya estaba bien: las preferencias las crea solo el servidor con el precio 
 **Recomendación:** A para la venta (honesto y sin deuda operativa) y B como mejora posterior si el comprador quiere ingresos recurrentes. **Cualquiera de las dos cambia textos de la pantalla de planes, así que espera tu decisión.**
 
 ### Decisiones de negocio pendientes (no se cambiaron)
-1. **Al comprar, los créditos del plan *reemplazan* el saldo** (comportamiento actual). Si alguien compra con créditos sobrantes, los pierde. Alternativa: sumarlos.
+1. ~~Al comprar, los créditos del plan *reemplazan* el saldo.~~ **Resuelto:** se suman (`CREDITS_BUCKETS_PROPOSAL.md` §8).
 2. **Al vencer el plan, los créditos se conservan** (comportamiento actual de `expireIfDue`). Alternativa: llevarlos a 0, o a 5, al vencer.
 3. **Reembolsos y contracargos:** se usa el valor por defecto descrito en el punto 2.7 (revocar y dejar los créditos en 0). Se puede cambiar, por ejemplo, para descontar solo los créditos no usados.
 4. Modelo A o B (arriba).

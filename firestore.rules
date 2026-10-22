@@ -94,7 +94,7 @@ service cloud.firestore {
     }
 
     function economicFields() {
-      return ['role', 'remainingCredits', 'subscriptionType', 'hasUsedFreeTrial', 'lastCreditReset', 'subscription'];
+      return ['role', 'remainingCredits', 'subscriptionType', 'hasUsedFreeTrial', 'lastCreditReset', 'subscription', 'creditBuckets'];
     }
 
     function credits(data) {

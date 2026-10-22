@@ -28,7 +28,7 @@ Las reglas de la Fase 3A limitan estas escrituras a transiciones acotadas (desco
 
 **Sin migración de datos:** el servicio usa los mismos campos de `users/{uid}` que ya lee la app (`UserCreditStats`, `Sidebar`, etc.).
 
-**Planes y precios:** se toman de `src/constants.ts` sin cambios. Se mantiene la regla de negocio actual: al pagar, los créditos del plan **reemplazan** el saldo. Queda como decisión de negocio si deberían sumarse.
+**Planes y precios:** se toman de `src/constants.ts` sin cambios. Al pagar, los créditos del plan **se suman** al saldo y vencen con el plan; los saldos anteriores no vencen. Es el modelo aprobado de créditos por origen (`CREDITS_BUCKETS_PROPOSAL.md` §8; antes reemplazaban el saldo).
 
 ## 3. Despliegue coordinado (Fase 4): qué va junto
 

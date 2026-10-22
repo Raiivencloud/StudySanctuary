@@ -76,18 +76,24 @@ export async function seedDemo(projectId = assertDemoEnvironment()) {
     ...extra,
   });
 
-  // Student with an active plan (granted like a verified payment would)
+  // Student with an active plan (granted like a verified payment would): 40 historical credits that
+  // never expire + what is left of the plan's 1000, which expire with the plan (credits by origin)
+  const planEnd = Date.now() + 62 * DAY;
   batch.set(db.doc(`users/${DEMO_STUDENT.uid}`), profile(DEMO_STUDENT, {
     remainingCredits: 640,
+    creditBuckets: [
+      { id: "payment_1000000001", kind: "plan", balance: 600, granted: 1000, expiresAt: planEnd, paymentId: "1000000001", planId: "trimestral" },
+      { id: "legacy", kind: "legacy", balance: 40, granted: 40, expiresAt: null },
+    ],
     subscriptionType: "Plan Trimestral",
     hasUsedFreeTrial: true,
     lastCreditReset: isoDate(0),
     subscription: {
       status: "active", type: "trimestral", planName: "Plan Trimestral",
-      subscriptionEndDate: Timestamp.fromMillis(Date.now() + 62 * DAY), lastPaymentId: "1000000001", updatedAt: now,
+      subscriptionEndDate: Timestamp.fromMillis(planEnd), lastPaymentId: "1000000001", updatedAt: now,
     },
   }));
-  batch.set(db.doc(`users/${DEMO_STUDENT.uid}/creditLedger/payment_1000000001`), { type: "plan_purchase", planId: "trimestral", amount: 1000, balanceAfter: 1000, createdAt: now, demo: true });
+  batch.set(db.doc(`users/${DEMO_STUDENT.uid}/creditLedger/payment_1000000001`), { type: "plan_purchase", planId: "trimestral", amount: 1000, balanceAfter: 1040, expiresAt: Timestamp.fromMillis(planEnd), createdAt: now, demo: true });
   batch.set(db.doc(`users/${DEMO_ADMIN.uid}`), profile(DEMO_ADMIN, {
     remainingCredits: 5, subscriptionType: "Gratis", hasUsedFreeTrial: false, lastCreditReset: isoDate(0),
     subscription: { status: "trial", type: "free", trialStartDate: now, subscriptionEndDate: null },

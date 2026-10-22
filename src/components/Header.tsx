@@ -10,6 +10,7 @@ import { UserBadge } from './UserBadge';
 import { isFounder } from '../config/admin';
 import { useCourses } from '../contexts/CourseContext';
 import { buildNotifications } from '../lib/studyStats';
+import { getCreditExpiry, type CreditExpiry } from '../services/userService';
 import { summarizePlan } from '../lib/planSummary';
 
 const NOTIFICATION_STYLE = {
@@ -80,9 +81,18 @@ export const Header: React.FC<HeaderProps> = ({ onViewChange, onToggleSidebar, o
       return [];
     }
   });
-  const notifications = useMemo(() => buildNotifications({ exams, activities, subscription: userProfile?.subscription })
+  // Next trial or plan credits that expire, as last reported by /api/credits
+  const [creditExpiry, setCreditExpiry] = useState<CreditExpiry | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    const update = () => setCreditExpiry(getCreditExpiry(user.uid));
+    update();
+    window.addEventListener('creditExpiryUpdated', update);
+    return () => window.removeEventListener('creditExpiryUpdated', update);
+  }, [user?.uid]);
+  const notifications = useMemo(() => buildNotifications({ exams, activities, subscription: userProfile?.subscription, creditExpiry })
     .map(n => ({ ...n, icon: NOTIFICATION_STYLE[n.kind].icon, color: NOTIFICATION_STYLE[n.kind].color, read: readIds.includes(n.id) })),
-    [exams, activities, userProfile?.subscription, readIds]);
+    [exams, activities, userProfile?.subscription, creditExpiry, readIds]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 

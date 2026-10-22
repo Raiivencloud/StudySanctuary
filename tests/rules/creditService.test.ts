@@ -124,7 +124,7 @@ test("free trial only once; paid plans cannot be started by the user", async () 
   assert.equal((await user("alice").get()).data()?.subscriptionType, "7 DÍAS GRATIS");
 });
 
-test("plan purchase (verified payment) is idempotent per payment id and sets the end date", async () => {
+test("plan purchase (verified payment) adds credits, is idempotent per payment id and sets the end date", async () => {
   const clock = new Date("2026-10-21T12:00:00Z");
   const service = createCreditService(db, { now: () => clock });
   await user("alice").set({ remainingCredits: 2 });
@@ -132,7 +132,7 @@ test("plan purchase (verified payment) is idempotent per payment id and sets the
   assert.deepEqual(await service.applyPlanPurchase("alice", "mensual", "pay123"), { applied: true });
   assert.deepEqual(await service.applyPlanPurchase("alice", "mensual", "pay123"), { applied: false });
   const data = (await user("alice").get()).data()!;
-  assert.equal(data.remainingCredits, 300);
+  assert.equal(data.remainingCredits, 302, "the plan ADDS its credits: the 2 the user had are kept");
   assert.equal(data.subscription.status, "active");
   assert.equal((data.subscription.subscriptionEndDate as Timestamp).toMillis(), clock.getTime() + 30 * 86400_000);
   await assert.rejects(service.applyPlanPurchase("alice", "gratis-infinito", "pay124"), (e) => codeOf(e) === "UNKNOWN_PLAN");
@@ -149,6 +149,7 @@ test("expiration: an active plan past its end date becomes expired", async () =>
   const data = (await user("alice").get()).data()!;
   assert.equal(data.subscription.status, "expired");
   assert.equal(data.subscriptionType, "Gratis");
+  assert.equal(data.remainingCredits, 0, "the plan's unused credits expire with the plan");
 });
 
 test("input validation: amounts, request ids and unknown users", async () => {

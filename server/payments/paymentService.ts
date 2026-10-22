@@ -11,7 +11,7 @@
  * Design and decisions: docs/PHASE5_PAYMENTS.md
  */
 import { FieldValue, Timestamp, type Firestore } from "firebase-admin/firestore";
-import { planPurchaseWrites, FREE_PLAN_NAME } from "../credits/creditService";
+import { grantPlanInTransaction, revokePlanInTransaction } from "../credits/creditService";
 import { getPaidPlan, PAYMENT_CURRENCY, type PaidPlan } from "./plans";
 import type { GatewayPayment, PaymentGateway } from "./gateway";
 
@@ -188,7 +188,7 @@ export function createPaymentService(db: Firestore, options: PaymentServiceOptio
             writeRecord({ applied: false, needsReview: true, reviewReason: "profile_not_found" });
             return { outcome: "invalid" as const, status: payment.status, uid: order.uid, planId: order.planId, issues: ["profile_not_found"] };
           }
-          planPurchaseWrites(tx, user, purchase, plan, paymentId, start);
+          grantPlanInTransaction(tx, user, userSnap.data(), purchase, (id) => ledgerRef(order.uid, id), plan, paymentId, start);
           writeRecord({ applied: true, appliedAt: Timestamp.fromDate(start), ...(partialRefund ? { needsReview: true, reviewReason: "partial_refund" } : {}) });
           writeOrder("paid");
           return { outcome: "applied" as const, status: payment.status, uid: order.uid, planId: order.planId };
@@ -201,21 +201,12 @@ export function createPaymentService(db: Firestore, options: PaymentServiceOptio
             return { outcome: applied ? "revoked" as const : "recorded" as const, status: payment.status, uid: order.uid, planId: order.planId };
           }
           backfill();
-          const current = userSnap.data();
-          const planIsCurrent = current?.subscription?.lastPaymentId === paymentId && current?.subscription?.status === "active";
-          const creditsRemoved = planIsCurrent && typeof current?.remainingCredits === "number" ? current.remainingCredits : 0;
-          if (planIsCurrent) {
-            tx.set(user, {
-              remainingCredits: 0,
-              subscriptionType: FREE_PLAN_NAME,
-              subscription: { status: "revoked", revokedReason: payment.status, updatedAt: Timestamp.fromDate(start) },
-            }, { merge: true });
-          }
-          tx.set(revocation, {
-            type: "plan_revoked", reason: payment.status, planId: order.planId, creditsRemoved, planWasCurrent: planIsCurrent,
-            createdAt: FieldValue.serverTimestamp(),
-          });
-          writeRecord({ applied: true, revokedAt: Timestamp.fromDate(start), ...(planIsCurrent ? {} : { needsReview: true, reviewReason: "revoked_not_current_plan" }) });
+          // Removes only the unused credits of THIS payment; credits granted before the bucket model are kept
+          const result = revokePlanInTransaction(tx, user, userSnap.data(), (id) => ledgerRef(order.uid, id), paymentId, payment.status, order.planId, start);
+          const reviewReason = result.consumed === null ? "revoked_without_bucket"
+            : !result.planWasCurrent ? "revoked_not_current_plan"
+            : result.otherPlanActive ? "revoked_other_plan_active" : null;
+          writeRecord({ applied: true, revokedAt: Timestamp.fromDate(start), ...(reviewReason ? { needsReview: true, reviewReason } : {}) });
           writeOrder(payment.status);
           return { outcome: "revoked" as const, status: payment.status, uid: order.uid, planId: order.planId };
         }

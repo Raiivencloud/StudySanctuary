@@ -1,6 +1,6 @@
-# Propuesta: créditos separados por origen
+# Créditos separados por origen
 
-**Estado:** propuesta, pendiente de aprobación. **El comportamiento económico actual no cambió.** El módulo `server/credits/creditBuckets.ts` existe y está probado (`tests/unit/creditBuckets.test.ts`, 14 pruebas), pero **ninguna parte de la app lo usa todavía**.
+**Estado:** **aprobado e implementado en desarrollo** (rama `release-candidate-1.1`). Las decisiones y lo implementado están en la **sección 8**. Las secciones 1 a 7 conservan el análisis original. Nada se desplegó ni se tocaron datos de producción.
 
 Responde a tus decisiones 2, 3 y 4:
 - **2.** Una compra no elimina los créditos que el usuario ya tiene.
@@ -132,3 +132,37 @@ Precio por crédito:
 - Anual: $12.000 / 5.000 = **$2,40**
 
 **El Trimestral es más caro por crédito que el Mensual**, y comprar tres Mensuales ($3.600, 900 créditos) cuesta menos que un Trimestral. Por eso se quitaron los textos "¡Ahorrás $2.800!" y los precios tachados (`PHASE7_COMMERCIAL_BLOCKERS.md`). Revisar los precios es una decisión tuya.
+
+## 8. Decisiones aprobadas e implementación
+
+| # | Decisión | Implementación |
+|---|---|---|
+| 1 | **B.** Los créditos de las pruebas nuevas vencen a los 7 días; los históricos no se modifican | `startFreeTrial` **suma** 15 créditos en una bolsa `trial` que vence a los 7 días (antes reemplazaba el saldo). Solo vencen los no usados (`expired_trial` en el historial). |
+| 2 | **B.** Reembolsos parciales: revisión manual | Sin cambios automáticos: el pago queda marcado `needsReview: partial_refund`, como antes. |
+| 3 | **A.** Los créditos del plan vencen al terminar, con aviso previo; los históricos y los comprados aparte no se eliminan | La compra **suma** una bolsa `payment_<id>` que vence con ese plan. La campana avisa 7 días antes: "Tu plan termina pronto… Los créditos del plan que no uses vencen ese día", o "Créditos por vencer" (por ejemplo, la prueba). `/api/credits` devuelve `expiring` con la cantidad y la fecha. |
+| 4 | **A.** Sin paquetes de créditos | No se vende nada nuevo. `grantPurchased` existe en el módulo, pero ningún flujo lo usa (una prueba lo verifica). |
+
+**Cómo funciona ahora:**
+- **Saldo existente:** en la primera operación de cada usuario, todo su saldo pasa a una bolsa `legacy` que **no vence nunca** y queda registrado en `migration_legacy`. Nadie gana ni pierde créditos.
+- **Orden de consumo:** primero lo que vence antes (prueba, planes por fecha); después lo que no vence (recarga diaria, histórico).
+- **Si la IA falla:** el crédito vuelve a la bolsa de la que salió. Si esa bolsa ya venció, no revive. Los cobros hechos con el código anterior vuelven al saldo histórico.
+- **Recarga diaria:** sin cambios (5 créditos con saldo 0, una vez por día UTC). No vence.
+- **Reembolso total o contracargo:** quita solo los créditos **no usados de ese pago**, registra los consumidos (`creditsConsumed`) y nunca deja saldo negativo. Si el plan reembolsado se compró **antes** de este modelo, sus créditos ya son históricos: **no se quitan**, el plan se revoca igual y el pago queda para revisión (`reviewReason: revoked_without_bucket`).
+- **Varios planes:** cada uno vence en su fecha; la suscripción muestra la fecha de fin más lejana.
+- **Vuelta atrás:** si se despliega el código anterior, este sigue funcionando porque escribe `remainingCredits`. Al volver al nuevo, la diferencia se absorbe en la bolsa histórica: el usuario conserva el total que veía.
+
+**Archivos:** `server/credits/creditService.ts` (reescrito sobre `creditBuckets.ts`, misma API), `server/payments/paymentService.ts` (otorga y revoca por bolsa), `server/routes/credits.ts` (`expiring`), `firestore.rules` (`creditBuckets` es un campo económico: el cliente no puede escribirlo), `src/lib/studyStats.ts`, `src/components/Header.tsx` y `src/services/userService.ts` (aviso), `src/legal/terms.md` (reglas en el borrador de términos), `scripts/demo/seed.ts`.
+
+**Pruebas:**
+
+| Archivo | Pruebas | Qué cubre |
+|---|---|---|
+| `tests/rules/creditModel.emulator.test.ts` | 11 | **Nuevo.** Migración exacta de saldos existentes (incluidos 0 y sin campo); vuelta atrás del código; vencimiento de la prueba y de cada plan; aviso; devolución a la bolsa de origen; cobros del código anterior; recarga diaria. **Concurrencia:** 46 operaciones simultáneas (6 notificaciones del mismo pago, 5 pruebas, 30 consumos, 5 lecturas): el plan y la prueba se otorgan **una vez**, cada crédito queda contabilizado y el total coincide siempre con la suma de las bolsas. 8 devoluciones simultáneas devuelven una sola vez. |
+| `tests/rules/payments.emulator.test.ts` | actualizado | La compra suma; el reembolso deja los créditos previos y registra los consumidos; el contracargo de un plan viejo quita solo sus 300 no usados; un pago del webhook anterior conserva el saldo histórico y queda para revisión |
+| `tests/rules/creditService.test.ts` | actualizado | La compra suma; al vencer el plan, sus créditos no usados vencen |
+| `tests/unit/creditModel.test.ts` | 4 | **Nuevo.** Aviso de vencimiento (cuándo sí y cuándo no, sin duplicar el aviso del plan), reglas en los términos, sin paquetes de créditos |
+
+**Antes de desplegar en producción** (requiere tu aprobación):
+1. Desplegar el servidor **junto con** las reglas (`creditBuckets` en `economicFields`).
+2. Revisar con `ops/` los usuarios con planes activos: sus créditos pasan a históricos y **no vencerán** (decisión 1/3: los históricos no se modifican).
+3. Comunicar el cambio a los usuarios. Desde ahora, las compras suman créditos y los créditos de los planes nuevos vencen.

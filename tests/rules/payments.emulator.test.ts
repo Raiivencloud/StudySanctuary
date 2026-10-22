@@ -77,13 +77,13 @@ test("checkout: the order is stored with the uid, plan, amount and currency; ext
   await assert.rejects(payments.createCheckout("ghost", undefined, "mensual"), (e) => e instanceof PaymentError && e.code === "PROFILE_NOT_FOUND");
 });
 
-test("approved: grants the plan once (credits, subscription, 30-day end date, ledger, payment record)", async () => {
+test("approved: grants the plan once (credits added, subscription, 30-day end date, ledger, payment record)", async () => {
   const { checkout, payment } = await checkoutAndPay("alice", "mensual", "approved");
   const before = Date.now();
   assert.equal((await payments.processPayment(payment.id)).outcome, "applied");
 
   const data = await profile("alice");
-  assert.equal(data.remainingCredits, 300);
+  assert.equal(data.remainingCredits, 302, "the plan ADDS 300 to the 2 the user had");
   assert.equal(data.subscriptionType, "Plan Mensual");
   assert.equal(data.subscription.status, "active");
   assert.equal(data.subscription.type, "mensual");
@@ -106,7 +106,7 @@ test("duplicates: repeated notifications never re-grant (credits spent after the
 
   for (let i = 0; i < 5; i++) assert.equal((await payments.processPayment(payment.id)).outcome, "already_applied");
   const data = await profile("alice");
-  assert.equal(data.remainingCredits, 299);
+  assert.equal(data.remainingCredits, 301);
   assert.equal(data.subscription.subscriptionEndDate.toMillis(), firstEnd);
   assert.equal((await ledger("alice")).filter((e) => e.type === "plan_purchase").length, 1);
 });
@@ -116,7 +116,7 @@ test("concurrency: 15 simultaneous notifications for the same payment grant the 
   const results = await Promise.all(Array.from({ length: 15 }, () => payments.processPayment(payment.id)));
   assert.equal(results.filter((r) => r.outcome === "applied").length, 1);
   assert.equal(results.filter((r) => r.outcome === "already_applied").length, 14);
-  assert.equal((await profile("alice")).remainingCredits, 5000);
+  assert.equal((await profile("alice")).remainingCredits, 5002);
   assert.equal((await ledger("alice")).filter((e) => e.type === "plan_purchase").length, 1);
 });
 
@@ -161,26 +161,29 @@ test("states: pending is recorded and granted only when approved; rejected and c
   assert.equal((await profile("bob")).subscription, undefined);
 });
 
-test("refund: revokes the current plan once (credits 0, status revoked, ledger entry); repeated or late notifications change nothing", async () => {
+test("refund: revokes the current plan once (only that payment's unused credits, status revoked, ledger entry); repeated or late notifications change nothing", async () => {
   const { payment } = await checkoutAndPay("alice", "trimestral", "approved");
   await payments.processPayment(payment.id);
+  await createCreditService(db).consume("alice", "spend-before-refund", 5);
   gateway.setStatus(payment.id, "refunded");
 
   assert.equal((await payments.processPayment(payment.id)).outcome, "revoked");
   const data = await profile("alice");
-  assert.equal(data.remainingCredits, 0);
+  assert.equal(data.remainingCredits, 2, "the 2 credits the user had before buying are kept; never negative");
   assert.equal(data.subscriptionType, "Gratis");
   assert.equal(data.subscription.status, "revoked");
   assert.equal(data.subscription.revokedReason, "refunded");
   const revoke = (await ledger("alice")).find((e) => e.id === `revoke_${payment.id}`);
-  assert.equal(revoke.creditsRemoved, 1000);
+  assert.equal(revoke.creditsRemoved, 995);
+  assert.equal(revoke.creditsConsumed, 5, "plan credits spent before the refund are recorded");
   assert.equal(revoke.planWasCurrent, true);
+  assert.equal((await record(payment.id)).needsReview, undefined);
 
   // Repeated refund notifications and a late "approved" replay change nothing
   assert.equal((await payments.processPayment(payment.id)).outcome, "revoked");
   gateway.setStatus(payment.id, "approved");
   assert.equal((await payments.processPayment(payment.id)).outcome, "already_applied");
-  assert.equal((await profile("alice")).remainingCredits, 0);
+  assert.equal((await profile("alice")).remainingCredits, 2);
   assert.equal((await ledger("alice")).filter((e) => e.type === "plan_revoked").length, 1);
   // Not an active plan any more: the AI kill switch treats the user as free
   assert.equal((await createCreditService(db).getBalance("alice")).planActive, false);
@@ -197,7 +200,8 @@ test("chargeback of an older payment keeps the newer plan and flags it for revie
   const data = await profile("alice");
   assert.equal(data.subscription.type, "anual");
   assert.equal(data.subscription.status, "active");
-  assert.equal(data.remainingCredits, 5000);
+  assert.equal(data.remainingCredits, 5002, "only the 300 unused credits of the charged-back payment are removed");
+  assert.equal((await ledger("alice")).find((e) => e.id === `revoke_${first.id}`).creditsRemoved, 300);
   assert.equal((await record(first.id)).needsReview, true);
   assert.equal((await ledger("alice")).find((e) => e.id === `revoke_${first.id}`).planWasCurrent, false);
 });
@@ -234,13 +238,13 @@ test("legacy preferences (external_reference = uid, before this phase) are still
     successUrl: "s", pendingUrl: "p", failureUrl: "f", notificationUrl: "n",
   })).id, "approved", { metadata: { plan_id: "mensual", user_id: "alice" } });
   assert.equal((await payments.processPayment(legacy.id)).outcome, "applied");
-  assert.equal((await profile("alice")).remainingCredits, 300);
+  assert.equal((await profile("alice")).remainingCredits, 302);
 
   const cheap = gateway.pay([...gateway.preferences.keys()][0], "approved", { amount: 10, metadata: { plan_id: "anual" } });
   assert.equal((await payments.processPayment(cheap.id)).outcome, "invalid");
 });
 
-test("transition: a payment already granted by the old webhook is not granted again, and a later refund still revokes it", async () => {
+test("transition: a payment already granted by the old webhook is not granted again; a later refund revokes the plan, keeps the historical credits and flags it", async () => {
   const pref = await gateway.createPreference({
     orderId: "alice", plan: (await import("../../server/payments/plans")).PAID_PLANS.mensual,
     successUrl: "s", pendingUrl: "p", failureUrl: "f", notificationUrl: "n",
@@ -256,7 +260,12 @@ test("transition: a payment already granted by the old webhook is not granted ag
   gateway.setStatus(old.id, "charged_back");
   assert.equal((await payments.processPayment(old.id)).outcome, "revoked");
   assert.equal((await profile("alice")).subscription.status, "revoked");
-  assert.equal((await ledger("alice")).find((e) => e.id === `revoke_${old.id}`).creditsRemoved, 120);
+  // Approved decision: credits granted before the bucket model are historical and never removed automatically
+  assert.equal((await profile("alice")).remainingCredits, 120);
+  const revoke = (await ledger("alice")).find((e) => e.id === `revoke_${old.id}`);
+  assert.equal(revoke.creditsRemoved, 0);
+  assert.equal(revoke.creditsBucketFound, false);
+  assert.equal((await record(old.id)).reviewReason, "revoked_without_bucket");
 });
 
 test("transition: an old legacy payment not recorded as the user's plan is flagged, not re-granted", async () => {
@@ -308,7 +317,7 @@ test("webhook over HTTP: signed notifications grant once; unsigned or forged one
 
       const results = await Promise.all([1, 2, 3, 4].map((i) => send(base, signed(`r-retry-${i}`)).then((r) => r.json())));
       assert.equal(results.filter((r: any) => r.outcome === "applied").length, 1);
-      assert.equal((await profile("alice")).remainingCredits, 300);
+      assert.equal((await profile("alice")).remainingCredits, 302);
     });
   } finally {
     console.error = originalError;

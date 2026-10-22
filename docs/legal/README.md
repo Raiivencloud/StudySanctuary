@@ -28,7 +28,6 @@
 | `DERECHOS_AUTORIDAD_CONTROL` | Autoridad de control y vías de reclamo | Por ejemplo, la AAIP en Argentina (Ley 25.326) |
 | `POLITICA_MENORES`, `EDAD_MINIMA` | Menores de edad | La app ofrece niveles "Inicial" y "Secundario" y **no verifica la edad** |
 | `POLITICA_REEMBOLSOS` | Reembolsos y derecho de arrepentimiento | El sistema ya revoca el plan ante un reembolso o contracargo (`PHASE5_PAYMENTS.md`). Definir los plazos y el procedimiento (botón de arrepentimiento si corresponde). |
-| `REGLAS_CREDITOS_VENCIMIENTO` | Vencimiento de créditos | **Depende de las decisiones pendientes del modelo de créditos** (`CREDITS_BUCKETS_PROPOSAL.md`, sección 7). Hoy los créditos de un plan **no vencen** al terminar el plan. |
 | `LIMITACION_RESPONSABILIDAD`, `LEY_Y_JURISDICCION`, `AVISO_CAMBIOS` | Cláusulas generales | — |
 
 ## Brechas técnicas que afectan a los textos

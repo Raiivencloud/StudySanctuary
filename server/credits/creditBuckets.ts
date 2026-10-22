@@ -1,9 +1,8 @@
 /**
- * PROPOSAL (not wired into the app yet): credits split by origin. See docs/CREDITS_BUCKETS_PROPOSAL.md.
+ * Credits split by origin (approved model, docs/CREDITS_BUCKETS_PROPOSAL.md §8).
  *
- * Pure functions over the user's credit state, so the rules can be tested in isolation before
- * any economic behavior changes. Once approved, creditService/paymentService would call them inside
- * their existing Firestore transactions (the state lives in users/{uid}.creditBuckets and
+ * Pure functions over the user's credit state; creditService/paymentService call them inside
+ * their Firestore transactions (the state lives in users/{uid}.creditBuckets and
  * users/{uid}.remainingCredits stays as the total the app already reads).
  *
  * Invariants (tested):

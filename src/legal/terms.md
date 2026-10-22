@@ -17,17 +17,18 @@ StudySanctuary es una plataforma de estudio que permite organizar cursos, tareas
 ## 3. Créditos y planes
 
 - Las funciones de IA consumen **créditos**. El costo en créditos de cada función se informa en la app.
-- Las cuentas gratuitas reciben una recarga diaria de créditos cuando el saldo llega a cero, y pueden activar **una única prueba gratuita**.
+- Las cuentas gratuitas reciben una recarga diaria de créditos cuando el saldo llega a cero, y pueden activar **una única prueba gratuita**, cuyos créditos vencen **7 días** después de activarla.
 - Los planes (Mensual, Trimestral y Anual) son **pagos únicos**, con la duración y la cantidad de créditos que se informan antes de comprar. **No se renuevan automáticamente ni generan débitos recurrentes.**
 - Si una generación con IA falla, el crédito de esa acción se devuelve.
-- {{REGLAS_CREDITOS_VENCIMIENTO}}
+- Comprar un plan **suma** sus créditos a los que ya tenés. Los créditos de cada plan vencen al terminar ese plan; la app avisa antes de la fecha. Se usan primero los créditos que vencen antes.
+- Los créditos que tenías antes de este sistema de vencimientos y los créditos de la recarga diaria **no vencen**.
 - Los precios se informan en pesos argentinos en la pantalla de planes, antes de pagar. Los pagos se procesan con Mercado Pago.
 
 ## 4. Reembolsos y arrepentimiento
 
 {{POLITICA_REEMBOLSOS}}
 
-Si un pago se reembolsa o se desconoce (contracargo), el plan asociado se revoca.
+Si un pago se reembolsa o se desconoce (contracargo), el plan asociado se revoca y se quitan los créditos de ese pago que todavía no se usaron. Los reembolsos parciales se revisan manualmente.
 
 ## 5. Contenido del usuario
 

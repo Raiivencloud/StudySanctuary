@@ -91,7 +91,7 @@ test("AI error → credit returned (ledger shows the refund)", async () => {
     assert.equal((await res.json()).refunded, true);
   });
   assert.equal(await balance(), 3);
-  const ledger = (await db.collection("users").doc("user-1").collection("creditLedger").get()).docs.map((d) => d.data());
+  const ledger = (await db.collection("users").doc("user-1").collection("creditLedger").get()).docs.map((d) => d.data()).filter((e) => e.type === "consume");
   assert.equal(ledger.length, 1);
   assert.equal(ledger[0].refunded, true);
 });

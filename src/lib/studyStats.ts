@@ -72,7 +72,11 @@ const inDays = (target: number, now: number) => {
   return days <= 0 ? 'hoy' : days === 1 ? 'mañana' : `en ${days} días`;
 };
 
-export function buildNotifications(input: { exams: ExamLike[]; subscription?: SubscriptionLike | null; activities: ActivityLike[]; now?: number }): StudyNotification[] {
+export function buildNotifications(input: {
+  exams: ExamLike[]; subscription?: SubscriptionLike | null; activities: ActivityLike[]; now?: number;
+  /** Next credits that expire, from /api/credits (trial or plan credits). */
+  creditExpiry?: { amount: number; expiresAt: string } | null;
+}): StudyNotification[] {
   const now = input.now ?? Date.now();
   const notifications: StudyNotification[] = [];
 
@@ -91,10 +95,12 @@ export function buildNotifications(input: { exams: ExamLike[]; subscription?: Su
 
   // Paid plan or free trial ending within 7 days
   const sub = input.subscription;
+  let planEndNotified: number | null = null;
   if (sub?.status === 'active') {
     const end = toMillis(sub.subscriptionEndDate);
     if (end && end > now && end - now <= 7 * DAY) {
-      notifications.push({ id: 'plan-ending', kind: 'plan', title: 'Tu plan termina pronto', message: `${sub.planName || 'Tu plan'} termina ${inDays(end, now)}. Es un pago único: no se renueva solo.`, time: '' });
+      planEndNotified = end;
+      notifications.push({ id: 'plan-ending', kind: 'plan', title: 'Tu plan termina pronto', message: `${sub.planName || 'Tu plan'} termina ${inDays(end, now)}. Es un pago único: no se renueva solo. Los créditos del plan que no uses vencen ese día.`, time: '' });
     }
   } else if (sub?.status === 'trial') {
     const start = toMillis(sub.trialStartDate);
@@ -102,6 +108,17 @@ export function buildNotifications(input: { exams: ExamLike[]; subscription?: Su
     if (end && end > now && end - now <= 2 * DAY) {
       notifications.push({ id: 'trial-ending', kind: 'plan', title: 'Prueba gratuita', message: `Tu período de prueba termina ${inDays(end, now)}.`, time: '' });
     }
+  }
+
+  // Trial or plan credits expiring within 7 days (advance notice; historical credits never expire)
+  const expiry = input.creditExpiry;
+  const expiresAt = expiry ? Date.parse(expiry.expiresAt) : NaN;
+  if (expiry && expiry.amount > 0 && Number.isFinite(expiresAt) && expiresAt > now && expiresAt - now <= 7 * DAY
+    && (planEndNotified === null || Math.abs(planEndNotified - expiresAt) > 60_000)) {
+    notifications.push({
+      id: `credits-expiring-${expiry.expiresAt}`, kind: 'plan', title: 'Créditos por vencer',
+      message: `${expiry.amount} ${expiry.amount === 1 ? 'crédito vence' : 'créditos vencen'} ${inDays(expiresAt, now)}. Usalos antes de esa fecha.`, time: '',
+    });
   }
 
   // Latest AI activity

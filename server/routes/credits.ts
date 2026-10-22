@@ -1,6 +1,6 @@
 /**
  * Credits API for the client (Phase 4). The server is the only authority:
- *   GET  /api/credits        balance (applies the daily refill and plan expiration)
+ *   GET  /api/credits        balance (applies the daily refill, plan expiration and credit expiry)
  *   POST /api/credits/trial  7-day free trial, once per account
  *   POST /api/credits/spend  spend 1 credit on a non-AI action (Arena cooldown skip)
  * Paid plans are never activated here: only by a verified payment (Phase 5 webhook).
@@ -51,6 +51,8 @@ export function createCreditsRouter(options: CreditsRouterOptions): Router {
         subscriptionStatus: balance.subscriptionType,
         hasUsedFreeTrial: balance.hasUsedFreeTrial,
         planActive: balance.planActive,
+        // Next credits that expire (trial or plan), for the advance notice
+        expiring: balance.expiring,
       });
     } catch (error) {
       fail(res, error, `Credits balance uid=${uid}`);
