@@ -1,7 +1,7 @@
 {
   "name": "studysanctuary",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.0-rc.1",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -18,7 +18,8 @@
     "scan:source": "tsx scripts/scan-secrets.ts --tracked",
     "scan:bundle": "tsx scripts/scan-secrets.ts dist",
     "verify:config": "tsx scripts/verify-config.ts",
-    "verify": "npm run lint && npm test && npm run scan:source && npm run test:build"
+    "verify": "npm run lint && npm test && npm run scan:source && npm run test:build",
+    "licenses": "tsx scripts/third-party-licenses.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

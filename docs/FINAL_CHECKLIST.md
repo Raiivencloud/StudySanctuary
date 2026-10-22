@@ -1,6 +1,6 @@
 # Lista de comprobación final
 
-Estado al **22/10/2026**, rama `phase7-commercial-blockers`. Ver también [`SALE_READINESS_REPORT.md`](./SALE_READINESS_REPORT.md).
+Estado al **22/10/2026**, versión **1.1.0-rc.1** (rama `release-candidate-1.1`). Ver también [`SALE_READINESS_REPORT.md`](./SALE_READINESS_REPORT.md).
 
 **Leyenda:**
 - ✅ verificado con pruebas automáticas o en el navegador
@@ -13,7 +13,7 @@ Estado al **22/10/2026**, rama `phase7-commercial-blockers`. Ver también [`SALE
 | # | Funcionalidad | Estado | Cómo se verificó |
 |---|---|---|---|
 | A1 | Registro e inicio de sesión con Google | ✅ en el emulador, 🟡 con Google real | Demo y sesiones del emulador |
-| A2 | Prueba gratis (15 créditos, una sola vez) y recarga diaria (5) | ✅ | Unitarias, emulador y navegador |
+| A2 | Prueba gratis (15 créditos que vencen a los 7 días, una sola vez) y recarga diaria (5) | ✅ | Unitarias, emulador y navegador |
 | A3 | Estudio IA: resumen, flashcards, examen, plan, ejercicios, esquema | ✅ (−1 crédito cada uno) | Navegador |
 | A4 | Tutor virtual, matemáticas, podcast (guion + audio), libros, mapa | ✅ | Navegador |
 | A5 | Herramientas del curso (sin costo, cuota diaria) | ✅ | Navegador |
@@ -26,6 +26,7 @@ Estado al **22/10/2026**, rama `phase7-commercial-blockers`. Ver también [`SALE
 | A12 | Asistente de voz | ⬜ **Experimental, desactivado** por decisión (una prueba impide mostrarlo) | Llamadas probadas en la Fase 4 |
 | A13 | Interfaz en móvil (375 px) sin scroll horizontal | ✅ IA y planes | Navegador |
 | A14 | Respuestas reales de Gemini (modelos de respaldo, voz) | 🟡 | Probar con una clave de desarrollo y presupuesto acotado |
+| A15 | Créditos por origen: las compras suman, los créditos de la prueba y los planes vencen con aviso, los históricos no vencen, los reembolsos quitan solo lo no usado | ✅ | Emulador (compatibilidad y concurrencia) y navegador |
 
 ## B. Seguridad
 
@@ -54,7 +55,7 @@ Estado al **22/10/2026**, rama `phase7-commercial-blockers`. Ver también [`SALE
 | C3 | Fusionar las ramas en `main` en el orden documentado y desplegar | ⬜ (aprobación del dueño) |
 | C4 | Alertas de presupuesto en Google Cloud (Gemini) | ⬜ |
 | C5 | Revisar los precios por acción: un podcast cuesta entre 15 y 30 veces más que un resumen; la cuota gratuita de 60 llamadas por día | ⬜ decisión de negocio (`SALE_AND_TRANSFER.md` §3.2) |
-| C6 | Modelo de créditos por origen (decisiones 2, 3 y 4) | ⬜ propuesto y probado, **no activado** (`CREDITS_BUCKETS_PROPOSAL.md`) |
+| C6 | Modelo de créditos por origen | ✅ aprobado e implementado en desarrollo (`CREDITS_BUCKETS_PROPOSAL.md` §8). ⬜ Desplegarlo con el resto (`RELEASE_1.1.md`) |
 
 ## D. Legal y contenido (bloqueantes para lanzar o vender)
 
@@ -64,15 +65,15 @@ Estado al **22/10/2026**, rama `phase7-commercial-blockers`. Ver también [`SALE
 | D2 | Testimonios inventados | ✅ Reemplazados por una presentación de funcionalidades (Fase 7) |
 | D3 | Promesas no implementadas y comparaciones de precio falsas | ✅ Quitadas en planes, landing, configuración, ayuda, libros y podcast (Fase 7; `commercialBlockers.test.ts`) |
 | D4 | Función para borrar la cuenta (derecho de supresión) | ⬜ no existe |
-| D5 | Licencias de recursos externos (SoundHelix, Unsplash...) y de `react-leaflet` (Hippocratic) | ⬜ revisión |
+| D5 | Licencias de recursos externos (SoundHelix, Unsplash, Esri...) y de `react-leaflet` (Hippocratic) | 🟡 Inventario y análisis hechos (`LICENSING_AND_IP.md`, `THIRD_PARTY_LICENSES.md`). ⬜ Decisión legal y reemplazo de música y mapas |
 | D6 | Facturación fiscal de los planes | ⬜ |
-| D7 | Derechos sobre el código (origen en AI Studio) y contrato de cesión | ⬜ abogado |
+| D7 | Derechos sobre el código (origen en AI Studio, código asistido por IA) y contrato de cesión | 🟡 Análisis en `LICENSING_AND_IP.md`. ⬜ abogado |
 
 ## E. Transferencia (`SALE_AND_TRANSFER.md`)
 
 | # | Paso | Estado |
 |---|---|---|
-| E1 | Repositorio: transferido o entregado, ramas fusionadas | ⬜ |
+| E1 | Repositorio: transferido o entregado, `release-candidate-1.1` fusionada (`RELEASE_1.1.md`) | ⬜ |
 | E2 | Proyecto de Google Cloud y Firebase: propietario y facturación del comprador (opción A) o proyecto nuevo (opción B) | ⬜ |
 | E3 | Rotar todos los secretos (`SECURITY_CREDENTIALS.md`) | ⬜ |
 | E4 | Mercado Pago del comprador (token, webhook y sandbox probado) | ⬜ |

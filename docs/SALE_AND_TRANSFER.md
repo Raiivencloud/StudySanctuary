@@ -10,7 +10,7 @@ Guía para quien compra StudySanctuary y para el traspaso desde el propietario a
 | Seguridad | Reglas de Firestore y Storage con pruebas en el emulador (`firestore.rules`, `storage.rules`, `tests/rules/`) |
 | IA | Proxy de Gemini en el servidor, créditos transaccionales, límites y reintentos (`server/ai/`, `server/credits/`) |
 | Pagos | Mercado Pago Checkout Pro con webhook firmado e idempotente (`server/payments/`) |
-| Pruebas | 146 unitarias, 82 en el emulador y un build verificado sin secretos (`npm run verify`, `npm run test:rules`) |
+| Pruebas | 158 unitarias, 93 en el emulador y un build verificado sin secretos (`npm run verify`, `npm run test:rules`) |
 | Demo | `npm run demo`: todo simulado, sin credenciales ni costos ([`DEMO.md`](./DEMO.md)) |
 | Operación | Scripts de solo lectura y de claims (`scripts/ops/`), y guías de despliegue (`docs/`) |
 
@@ -130,7 +130,7 @@ Las comisiones dependen del medio de pago y del plazo de acreditación. No se pu
   - exportar Auth con `firebase auth:export`;
   - importar en el proyecto nuevo.
 
-**Repositorio:** transferir el repositorio de GitHub o entregar una copia. Las ramas de trabajo (`security-and-build-hardening`... `phase6-commercial-readiness`) **todavía no están fusionadas en `main`**: el orden de fusión y despliegue está en `PHASE4_REPORT.md` y `PHASE5_PAYMENTS.md`.
+**Repositorio:** transferir el repositorio de GitHub o entregar una copia. Todas las fases están consolidadas en `release-candidate-1.1`, que **todavía no está fusionada en `main`**: la fusión y el despliegue están en [`RELEASE_1.1.md`](./RELEASE_1.1.md).
 
 ## 6. Elementos que hay que reemplazar al vender
 
@@ -145,7 +145,7 @@ Las comisiones dependen del medio de pago y del plazo de acreditación. No se pu
 | Presentación de funcionalidades de la landing (reemplazó a testimonios inventados en la Fase 7) | `src/components/LandingView.tsx` (`testimonials`) | Opcional: sumar **reseñas reales** moderadas (`FeaturedFeedback` ya existe) |
 | Textos legales (borradores) | `src/legal/privacy.md`, `src/legal/terms.md` y las variables `VITE_LEGAL_*` | **Revisión profesional** y `VITE_LEGAL_TEXTS_APPROVED=true` (sección 7) |
 | Capturas de la landing | `public/assets/screens/*.jpg` (capturas reales de la demo) | Actualizarlas si cambia la marca |
-| Recursos externos (imágenes de Unsplash y Picsum, música de SoundHelix, texturas) | `App`, `LandingView`, `ArenaView`, `BooksView`, `MultimediaGenerator`, `SettingsView`, `AuthContext`, `MusicContext`, `arenaService`, `constants/arenaCards` | Verificar licencias y **alojarlos** en el propio dominio |
+| Recursos externos (imágenes de Unsplash y Picsum, música de SoundHelix, texturas, mapas de Esri) | `App`, `LandingView`, `ArenaView`, `BooksView`, `MultimediaGenerator`, `SettingsView`, `AuthContext`, `MusicContext`, `arenaService`, `constants/arenaCards` | Verificar licencias y **alojarlos** en el propio dominio |
 | Cuentas y credenciales de servicios | Variables y secretos | Ver la sección 4 |
 
 ## 7. Aspectos legales que el comprador debe resolver (no técnicos)
@@ -154,6 +154,5 @@ Las comisiones dependen del medio de pago y del plazo de acreditación. No se pu
 - **Brechas que afectan a los textos** ([`legal/DATA_INVENTORY.md`](./legal/DATA_INVENTORY.md)): no hay borrado ni exportación de la cuenta desde la app, ni verificación de edad, ni banner de cookies.
 - **Datos personales:** la base tiene emails, nombres, apuntes y archivos de estudiantes, posiblemente **menores** (nivel "Inicial" y "Secundario"). Consentimiento, derechos de acceso y borrado, y registro de la base según la normativa aplicable.
 - **Contenido generado por IA** y uso de documentos de los usuarios: revisar las condiciones de Gemini API.
-- **Origen del código:** el proyecto se inició con Google AI Studio (`metadata.json`, `firebase-blueprint.json`). Confirmar los derechos sobre el código según los términos aplicables.
-- **Licencias de terceros:** `react-leaflet` usa **Hippocratic-2.1** (ver [`DEPENDENCIES.md`](./DEPENDENCIES.md)).
+- **Origen del código y licencias:** el proyecto se inició con Google AI Studio y se escribió con asistencia de IA; `react-leaflet` usa **Hippocratic-2.1**; la música y los mapas no tienen licencia comercial confirmada. Análisis completo en [`LICENSING_AND_IP.md`](./LICENSING_AND_IP.md).
 - **Pagos:** facturación fiscal de los planes vendidos (no implementada en la app).

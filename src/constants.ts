@@ -1,4 +1,4 @@
-export const VERSION = '1.0.1'; // Increment this to force cache clear
+export const VERSION = '1.1.0'; // Increment this to force cache clear
 
 export const SUBSCRIPTION_PLANS = {
   PRUEBA: {

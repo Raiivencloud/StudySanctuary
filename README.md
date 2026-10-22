@@ -1,6 +1,6 @@
 # StudySanctuary 📚
 
-Plataforma de estudio con IA para estudiantes de nivel inicial, secundario, universitario y de posgrado. Organiza cursos, tareas y exámenes, y genera resúmenes, flashcards, exámenes, planes, ejercicios, esquemas, podcasts, un tutor virtual y la Arena (trivia con ranking) con Google Gemini. La monetización se hace con créditos y planes de pago único con Mercado Pago.
+Plataforma de estudio con IA para estudiantes de nivel inicial, secundario, universitario y de posgrado. Organiza cursos, tareas y exámenes, y genera resúmenes, flashcards, exámenes, planes, ejercicios, esquemas, podcasts, un tutor virtual y la Arena (trivia con ranking) con Google Gemini. La monetización se hace con créditos y planes de pago único con Mercado Pago. Versión **1.1.0-rc.1**.
 
 ## Probarlo en 2 minutos (sin credenciales ni costos)
 
@@ -30,6 +30,7 @@ npm run demo            # lo anterior + datos de ejemplo y cuentas demo
 npm run verify          # tipos, pruebas unitarias, escaneo de secretos y build
 npm run test:rules      # reglas, créditos y pagos en el emulador (Java 21)
 npm run verify:config   # valida la configuración sin mostrar valores
+npm run licenses        # inventario de licencias de terceros
 npm run build && npm start
 ```
 
@@ -37,7 +38,11 @@ npm run build && npm start
 
 | Tema | Documento |
 |---|---|
+| **Paquete de venta (descripción, funcionalidades, requisitos, costos, limitaciones)** | [`docs/SALE_PACKAGE.md`](docs/SALE_PACKAGE.md) |
+| **Riesgos para el comprador** | [`docs/BUYER_RISKS.md`](docs/BUYER_RISKS.md) |
+| **Versión 1.1.0-rc.1: contenido, verificación, fusión y despliegue** | [`docs/RELEASE_1.1.md`](docs/RELEASE_1.1.md) |
 | **Venta, instalación, transferencia, servicios, costos y licencias** | [`docs/SALE_AND_TRANSFER.md`](docs/SALE_AND_TRANSFER.md) |
+| **Licencias y propiedad intelectual** | [`docs/LICENSING_AND_IP.md`](docs/LICENSING_AND_IP.md), [`docs/THIRD_PARTY_LICENSES.md`](docs/THIRD_PARTY_LICENSES.md) |
 | **Estado para la venta (código fuente / SaaS / costos)** | [`docs/SALE_READINESS_REPORT.md`](docs/SALE_READINESS_REPORT.md) |
 | **Lista de comprobación final** | [`docs/FINAL_CHECKLIST.md`](docs/FINAL_CHECKLIST.md) |
 | Textos legales (borradores para revisión) | [`docs/legal/README.md`](docs/legal/README.md) |
@@ -48,7 +53,7 @@ npm run build && npm start
 | Reglas de Firestore y su despliegue | [`docs/FIRESTORE_SECURITY_3A.md`](docs/FIRESTORE_SECURITY_3A.md), [`docs/FIRESTORE_RULES_DEPLOYMENT.md`](docs/FIRESTORE_RULES_DEPLOYMENT.md), [`docs/FIRESTORE_DATABASES.md`](docs/FIRESTORE_DATABASES.md) |
 | IA en el servidor y créditos (orden de despliegue) | [`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md), [`docs/CREDITS_SERVER_MODEL.md`](docs/CREDITS_SERVER_MODEL.md) |
 | Pagos | [`docs/PHASE5_PAYMENTS.md`](docs/PHASE5_PAYMENTS.md) |
-| Propuesta de créditos por origen | [`docs/CREDITS_BUCKETS_PROPOSAL.md`](docs/CREDITS_BUCKETS_PROPOSAL.md) |
+| Créditos por origen (modelo aprobado) | [`docs/CREDITS_BUCKETS_PROPOSAL.md`](docs/CREDITS_BUCKETS_PROPOSAL.md) |
 | Herramientas de operación (solo lectura y claims) | [`docs/ops/README.md`](docs/ops/README.md) |
 
 ## Estructura

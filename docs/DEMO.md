@@ -62,7 +62,9 @@ Siempre se ve el aviso **"DEMO · IA y pagos simulados · datos locales, sin cos
 5. **Tutor Virtual**, **Matemáticas**, **Podcast** (guion + audio) y **Explorador** (buscar "París" o "Machu Picchu").
 6. **Arena** → ¡Entrar! → elegir una carta → responder (la opción correcta es la B en la demo) → ranking.
 7. **Calendario** y **Grupos de estudio**.
-8. **Planes** → "Comenzar ahora" en un plan → checkout simulado → **approved**. Vuelve con "Plan … – N Créditos Activos" y la fecha de fin. Probar también **pending** y **rejected**.
+8. **Planes** → "Comenzar ahora" en un plan → checkout simulado → **approved**. Vuelve con "Plan … – N Créditos Activos" (los créditos del plan **se suman** al saldo) y la fecha de fin. Probar también **pending** y **rejected**.
+
+**Créditos por origen:** la estudiante demo tiene 640 créditos: 600 que quedan de su plan Trimestral (vencen con el plan, en 62 días) y 40 históricos que no vencen (campo `creditBuckets` en el emulador). La campana avisa cuando hay créditos que vencen en los próximos 7 días.
 9. Cerrar sesión → "Entrar como administrador (demo)" → **Admin Panel**.
 
 ## 6. Verificación automática
